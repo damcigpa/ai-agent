@@ -1,67 +1,44 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { client } from "./client.js";
-import { tools, runTool } from "./tools/index.js";
+import { hub } from "./hub.js";
+import { createError, formatError, formatUserError } from "./errors.js";
 
-const messages: Anthropic.MessageParam[] = [];
+const messages: { role: string; content: string }[] = [];
 
-const MAX_TURNS = 20;
+function applyCache(
+  messages: { role: string; content: string }[],
+): Anthropic.MessageParam[] {
+  return messages.map((msg, index) => ({
+    role: msg.role as "user" | "assistant",
+    content: [
+      {
+        type: "text" as const,
+        text: msg.content,
+        ...(index === messages.length - 1 && {
+          cache_control: { type: "ephemeral" as const },
+        }),
+      },
+    ],
+  }));
+}
 
-export async function chat(userMessage: string): Promise<void> {
+export async function chat(userMessage: string): Promise<string> {
   messages.push({ role: "user", content: userMessage });
 
-  let turn = 0;
-
-  while (turn < MAX_TURNS) {
-    turn++;
-
-    let response: Anthropic.Message;
-    try {
-      response = await client.messages.create({
-        model: "claude-sonnet-4-6",
-        max_tokens: 1024,
-        tools,
-        messages,
-      });
-    } catch (e) {
-      console.error(`API error: ${(e as Error).message}`);
-      break;
-    }
-
-    if (response.stop_reason === "end_turn") {
-      for (const block of response.content) {
-        if (block.type === "text") {
-          console.log(`\nClaude: ${block.text}\n`);
-        }
-      }
-      messages.push({ role: "assistant", content: response.content });
-      break;
-    }
-
-    if (response.stop_reason === "tool_use") {
-      messages.push({ role: "assistant", content: response.content });
-
-      const toolResults: Anthropic.ToolResultBlockParam[] = [];
-
-      for (const block of response.content) {
-        if (block.type === "tool_use") {
-          const input = block.input as Record<string, string>;
-          console.log(`  [${block.name}] ${JSON.stringify(input)}`);
-          const result = runTool(block.name, input);
-          toolResults.push({
-            type: "tool_result",
-            tool_use_id: block.id,
-            content: result,
-          });
-        }
-      }
-
-      messages.push({ role: "user", content: toolResults });
-    }
-  }
-
-  if (turn === MAX_TURNS) {
-    console.warn(
-      `\n⚠️  Warning: max turns (${MAX_TURNS}) reached — loop was force-stopped`,
+  try {
+    const response = await hub(applyCache(messages));
+    messages.push({ role: "assistant", content: response });
+    console.log(`\nClaude: ${response}\n`);
+    return response;
+  } catch (e) {
+    const error = createError(
+      "HUB_FAILED",
+      "agent",
+      "Hub failed to process message",
+      { cause: e },
     );
+    console.error(formatError(error));
+    const userFacing = formatUserError(error);
+    messages.push({ role: "assistant", content: userFacing });
+    return userFacing;
   }
 }
