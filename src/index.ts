@@ -1,3 +1,4 @@
+import "dotenv/config";
 import * as readline from "readline";
 import { chat } from "./agent.js";
 

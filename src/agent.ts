@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { hub } from "./hub.js";
+import { hub } from "./hub/index.js";
 import { createError, formatError, formatUserError } from "./errors.js";
+import { emit } from "./progress.js";
 
 const messages: { role: string; content: string }[] = [];
 
@@ -27,6 +28,7 @@ export async function chat(userMessage: string): Promise<string> {
   try {
     const response = await hub(applyCache(messages));
     messages.push({ role: "assistant", content: response });
+    emit("done");
     console.log(`\nClaude: ${response}\n`);
     return response;
   } catch (e) {
