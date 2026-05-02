@@ -50,7 +50,7 @@ export async function runTool(
 ): Promise<string> {
   switch (name) {
     case "web_search":
-      return await webSearch(input.query);
+      return await webSearch(input.query, "general");
     case "read_file":
       return readFile(input.path);
     case "write_file":

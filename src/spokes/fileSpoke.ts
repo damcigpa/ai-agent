@@ -3,6 +3,7 @@ import { client } from "../client.js";
 import { readFile } from "../tools/readFile.js";
 import { writeFile } from "../tools/writeFile.js";
 import { createError, formatError } from "../errors.js";
+import { PROMPTS } from "../prompts.js";
 
 const MAX_TURNS = 3;
 
@@ -40,10 +41,8 @@ export async function fileSpoke(task: string): Promise<string> {
       const response = await client.messages.create({
         model: "claude-sonnet-4-6",
         max_tokens: 2048,
-        system:
-          "You are a file assistant. Your only job is to write content to files. Always use the write_file tool. Always write to output.txt unless told otherwise.",
+        system: PROMPTS.file,
         tools,
-        // Always force write_file — no reason to give Claude a choice here
         tool_choice: { type: "tool", name: "write_file" },
         messages,
       });
@@ -57,7 +56,6 @@ export async function fileSpoke(task: string): Promise<string> {
 
       if (response.stop_reason === "tool_use") {
         messages.push({ role: "assistant", content: response.content });
-
         const toolResults: Anthropic.ToolResultBlockParam[] = [];
 
         for (const block of response.content) {

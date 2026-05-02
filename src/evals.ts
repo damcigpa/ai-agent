@@ -111,7 +111,7 @@ async function runTestCase(tc: TestCase): Promise<EvalResult> {
           toolCalled = block.name;
           toolInput = block.input as Record<string, string>;
 
-          const result = runTool(block.name, toolInput);
+          const result = await runTool(block.name, toolInput);
           toolResults.push({
             type: "tool_result",
             tool_use_id: block.id,
@@ -164,7 +164,7 @@ async function runTestCase(tc: TestCase): Promise<EvalResult> {
         };
       }
     }
-  }
+  } 
 
   // 4. Grade response quality with Claude
   if (tc.useGrader && finalResponse) {
