@@ -142,7 +142,9 @@ export async function executeExplainStep(
 
   emit("explaining");
   console.log("  [hub → explain_spoke]");
-  const exp = await explainSpoke(findingsToExplain, userMessage, onEvent);
+
+  const analysisMode = /elemz|analyz|témák|stílus|szerkezet|műfaj|themes|literary devices|interpret/i.test(userMessage);
+  const exp = await explainSpoke(findingsToExplain, userMessage, onEvent, analysisMode);
 
   return {
     result: exp.summary,
@@ -173,7 +175,7 @@ export async function executeStep(
     return executeAnalyzeStep(userMessage, searchFindings, analysisFindings, explanation);
   }
 
-  if (stepLower.includes("search") || /\bfind\b/.test(stepLower)) {
+  if (stepLower.includes("search") || stepLower.includes("find")) {
     return executeSearchStep(userMessage, subject, searchFindings, analysisFindings, explanation);
   }
 

@@ -38,18 +38,20 @@ Rules for including explain_spoke:
 - ALWAYS include explain_spoke for literary_analysis questions
 
 Rules for including analyze_spoke:
-- SKIP analyze_spoke for factual questions like "what is the text of X", "who wrote X", "find the poem X"
-- INCLUDE analyze_spoke ONLY when the user explicitly asks for interpretation, themes, literary devices, or deeper meaning
+- ONLY use analyze_spoke when ALL of these are true:
+  1. The user explicitly uses words like "analyze", "analysis", "themes", "literary devices", "interpret", "elemzés", "elemez", "témák", "stílus"
+  2. The subject is "literature" or "literary_analysis" — NOT hungarian_literature, hungarian_history, history, or science
+- In all other cases use search_spoke instead
 
 Previous topic: "${previousTopic || "none"}"
 Current question: "${userMessage}"
 
 Reply with only a JSON object, no explanation. Examples:
-{ "subject": "history", "topic": "Caesar crossing Rubicon date", "newTopic": true, "steps": ["search for information about: when did Caesar cross the Rubicon", "explain the findings clearly"] }
+{ "subject": "history", "topic": "Caesar crossing Rubicon date", "newTopic": true, "steps": ["search for information about: when did Caesar cross the Rubicon"] }
 { "subject": "history", "topic": "Napoleon's laws", "newTopic": true, "steps": ["search for information about: Napoleon's laws", "explain the findings clearly"] }
-{ "subject": "literary_analysis", "topic": "Hamlet soliloquy", "newTopic": true, "steps": ["analyze the work", "explain the analysis in accessible terms"] }
+{ "subject": "literary_analysis", "topic": "Hamlet themes", "newTopic": true, "steps": ["analyze the work", "explain the analysis in accessible terms"] }
 { "subject": "hungarian_history", "topic": "Rákóczi szabadságharc", "newTopic": true, "steps": ["search for information about: Rákóczi Ferenc szabadságharca", "explain the findings clearly"] }
-{ "subject": "hungarian_literature", "topic": "Petőfi Sándor", "newTopic": true, "steps": ["search for information about: Petőfi Sándor élete és munkássága", "explain the findings clearly"] }
+{ "subject": "hungarian_literature", "topic": "Pannónia dicsérete elemzés", "newTopic": true, "steps": ["search for information about: Janus Pannonius Pannónia dicsérete elemzés", "explain the findings clearly"] }
 { "subject": "history", "topic": "Napoleon's laws", "newTopic": false, "steps": ["search for information about: economic effects of Napoleon's laws", "explain the findings clearly"] }`,
       },
     ],
@@ -112,6 +114,7 @@ Current findings: ${JSON.stringify(findings, null, 2)}
 Rules:
 - If confidence is low, add another search step before explaining
 - If confidence is high, keep remaining steps as is
+- Always end with file_spoke to write to output.txt
 
 Reply with only a JSON array of remaining steps, nothing else.`,
       },

@@ -19,16 +19,29 @@ export async function explainSpoke(
   findings: ResearchFindings,
   userQuestion: string,
   onEvent: (event: StreamEvent) => void,
+  analysisMode: boolean = false
 ): Promise<Explanation> {
+  const analysisInstructions = analysisMode
+    ? `Provide a DEEP literary analysis including:
+- Main themes and their significance
+- Literary devices (metaphor, symbolism, allegory, imagery, etc.)
+- Structure and form (verse type, rhyme scheme, meter if applicable)
+- Historical and biographical context
+- The author's message and intent
+- Why this work matters in literary history`
+    : `Provide a clear, accessible explanation appropriate for an eighth grade student preparing for a high school exam.`;
+
   const messages: Anthropic.MessageParam[] = [
     {
       role: "user",
-      content: `Using these research findings, answer the following question with a clear, thorough explanation.
+      content: `Using these research findings, answer the following question.
 
 Question: "${userQuestion}"
 
 Research findings:
 ${JSON.stringify(findings, null, 2)}
+
+${analysisInstructions}
 
 Respond ONLY with a JSON object matching this exact shape, no explanation, no markdown:
 {
@@ -81,7 +94,7 @@ Respond ONLY with a JSON object matching this exact shape, no explanation, no ma
             "PARSE_FAILED",
             "searchSpoke",
             "Failed to parse explanation JSON",
-            { cause: e, turn },
+            { cause: e, turn }
           );
           console.error(formatError(error));
           onEvent({ type: "error", data: "Failed to parse explanation" });
@@ -98,7 +111,7 @@ Respond ONLY with a JSON object matching this exact shape, no explanation, no ma
         "API_FAILED",
         "searchSpoke",
         "API call failed in explain spoke",
-        { cause: e, turn },
+        { cause: e, turn }
       );
       console.error(formatError(error));
       onEvent({ type: "error", data: (e as Error).message });
@@ -108,7 +121,7 @@ Respond ONLY with a JSON object matching this exact shape, no explanation, no ma
   const error = createError(
     "MAX_TURNS_REACHED",
     "searchSpoke",
-    `Explain spoke reached max turns (${MAX_TURNS})`,
+    `Explain spoke reached max turns (${MAX_TURNS})`
   );
   console.warn(formatError(error));
   return {
