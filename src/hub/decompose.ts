@@ -37,6 +37,10 @@ Rules for including explain_spoke:
   Examples: "Why did X happen?", "What were the causes of X?", "How did X affect Y?", "What is the significance of X?"
 - ALWAYS include explain_spoke for literary_analysis questions
 
+Rules for including analyze_spoke:
+- SKIP analyze_spoke for factual questions like "what is the text of X", "who wrote X", "find the poem X"
+- INCLUDE analyze_spoke ONLY when the user explicitly asks for interpretation, themes, literary devices, or deeper meaning
+
 Previous topic: "${previousTopic || "none"}"
 Current question: "${userMessage}"
 

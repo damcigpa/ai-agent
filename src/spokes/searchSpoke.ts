@@ -9,10 +9,12 @@ import { trackUsage } from "../tokenTracker.js";
 import { emit } from "../progress.js";
 import { LiteratureSubject } from "../types.js";
 
-const MAX_TURNS = 8;
+const MAX_TURNS = 4;
 const MAX_FETCHES = 2;
 
-const LITERATURE_SUBJECTS: Subject[] = [
+const failedUrls = new Set<string>();
+
+const LITERATURE_SUBJECTS: LiteratureSubject [] = [
   "literature",
   "literary_analysis",
   "hungarian_literature",
@@ -80,7 +82,7 @@ function validateSchema(data: unknown): data is ResearchFindings {
 
 
 function validateFindings(findings: ResearchFindings): string | null {
-  if (!LITERATURE_SUBJECTS.includes(findings.subject as Subject)) {
+  if (!LITERATURE_SUBJECTS.includes(findings.subject as LiteratureSubject)) {
     return null;
   }
 
@@ -269,11 +271,28 @@ If search snippets are too short, use fetch_page on the single most promising UR
 
         // fetches in parallel
         const fetchResults = await Promise.all(
-          fetches.map(async (f) => {
-            emit("fetching_page");
-            console.log(`  [searchSpoke → fetch_page] ${f.url}`);
-            return { id: f.id, result: await fetchPage(f.url) };
-          })
+          fetches
+            .filter((f) => {
+              if (failedUrls.has(f.url)) {
+                console.log(`  ⏭️  Skipping previously failed URL: ${f.url}`);
+                toolResults.push({
+                  type: "tool_result",
+                  tool_use_id: f.id,
+                  content: "Skipped: this URL already timed out previously",
+                });
+                return false;
+              }
+              return true;
+            })
+            .map(async (f) => {
+              emit("fetching_page");
+              console.log(`  [searchSpoke → fetch_page] ${f.url}`);
+              const result = await fetchPage(f.url);
+              if (result.includes("timed out") || result.includes("Failed to fetch")) {
+                failedUrls.add(f.url);
+              }
+              return { id: f.id, result };
+            })
         );
         fetchResults.forEach((f) =>
           toolResults.push({
