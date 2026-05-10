@@ -2,14 +2,21 @@ import Anthropic from "@anthropic-ai/sdk";
 import { client } from "../client.js";
 import { webSearch } from "../tools/webSearch.js";
 import { fetchPage } from "../tools/fetchPage.js";
-import { verifyFact } from "../tools/verifyFact.js";
 import { createError, formatError } from "../errors.js";
 import { ResearchFindings, Subject } from "../types.js";
 import { PROMPTS } from "../prompts.js";
+import { trackUsage } from "../tokenTracker.js";
 import { emit } from "../progress.js";
+import { LiteratureSubject } from "../types.js";
 
 const MAX_TURNS = 8;
 const MAX_FETCHES = 2;
+
+const LITERATURE_SUBJECTS: Subject[] = [
+  "literature",
+  "literary_analysis",
+  "hungarian_literature",
+];
 
 const tools: Anthropic.Tool[] = [
   {
@@ -31,28 +38,12 @@ const tools: Anthropic.Tool[] = [
     input_schema: {
       type: "object",
       properties: {
-        url: {
-          type: "string",
-          description: "The full URL of the page to fetch",
-        },
+        url: { type: "string", description: "The full URL of the page to fetch" },
       },
       required: ["url"],
     },
   },
 ];
-
-export interface ResearchFindings2 {
-  author: string;
-  work: string;
-  date: string;
-  context: string;
-  confidence: "high" | "medium" | "low";
-  sources: string[];
-  subject?: Subject;
-  keyFacts?: string[];
-  escalate?: boolean;
-  escalateReason?: string;
-}
 
 function emptyFindings(subject: Subject): ResearchFindings {
   return {
@@ -67,54 +58,63 @@ function emptyFindings(subject: Subject): ResearchFindings {
   };
 }
 
+function validateSchema(data: unknown): data is ResearchFindings {
+  if (typeof data !== "object" || data === null || Array.isArray(data)) return false;
+
+  const d = data as Record<string, unknown>;
+
+  if (typeof d.author !== "string") return false;
+  if (typeof d.work !== "string") return false;
+  if (typeof d.date !== "string") return false;
+  if (typeof d.context !== "string") return false;
+  if (!["high", "medium", "low"].includes(d.confidence as string)) return false;
+  if (!Array.isArray(d.sources)) return false;
+  if (!d.sources.every((s) => typeof s === "string")) return false;
+  if (d.keyFacts !== undefined) {
+    if (!Array.isArray(d.keyFacts)) return false;
+    if (!d.keyFacts.every((f) => typeof f === "string")) return false;
+  }
+
+  return true;
+}
+
+
+function validateFindings(findings: ResearchFindings): string | null {
+  if (!LITERATURE_SUBJECTS.includes(findings.subject as Subject)) {
+    return null;
+  }
+
+  if (!findings.author && !findings.work) {
+    return "author and work both missing for literature question";
+  }
+
+  return null;
+}
+
 async function routeByConfidence(
-  findings: ResearchFindings,
+  findings: ResearchFindings
 ): Promise<ResearchFindings> {
   switch (findings.confidence) {
     case "high":
-      console.log("  ✅ Confidence high — skipping verification");
-      return findings;
-
     case "medium":
-      emit("verifying");
-      console.log("  🔍 Confidence medium — running verification...");
-      const verification = await verifyFact(findings);
-      if (verification.confirmed) {
-        console.log(`  ✅ Verified — ${verification.reason}`);
-        return {
-          ...findings,
-          confidence: verification.confidence,
-          sources: [...new Set([...findings.sources, ...verification.sources])],
-        };
-      } else {
-        console.log(`  ⚠️  Verification failed — ${verification.reason}`);
-        return {
-          ...findings,
-          confidence: "low",
-          escalate: true,
-          escalateReason: `Verification failed: ${verification.reason}`,
-        };
-      }
+      console.log(`  ✅ Confidence ${findings.confidence} — skipping verification`);
+      return findings;
 
     case "low":
       console.log("  🔺 Confidence low — escalating to hub");
       return {
         ...findings,
         escalate: true,
-        escalateReason:
-          "Confidence too low to verify, needs different search strategy",
+        escalateReason: "Confidence too low, needs different search strategy",
       };
   }
 }
 
 export async function searchSpoke(
   task: string,
-  subject: Subject = "general",
+  subject: Subject = "general"
 ): Promise<ResearchFindings> {
-  const messages: Anthropic.MessageParam[] = [
-    {
-      role: "user",
-      content: `${task}
+  const baseContent = `${task}
 
 You must respond ONLY with a JSON object matching this exact shape, no explanation, no markdown:
 {
@@ -128,21 +128,51 @@ You must respond ONLY with a JSON object matching this exact shape, no explanati
   "keyFacts": ["fact1", "fact2", "fact3"]
 }
 
-If search snippets are too short, use fetch_page on promising URLs before responding.`,
-    },
+If search snippets are too short, use fetch_page on the single most promising URL only before responding.`;
+
+  const messages: Anthropic.MessageParam[] = [
+    { role: "user", content: baseContent },
   ];
 
+  let fetchCount = 0;
+
   for (let turn = 0; turn < MAX_TURNS; turn++) {
+    const isLastTurn = turn === MAX_TURNS - 1;
+
     try {
-      const response = await client.messages.create({
+      const stream = client.messages.stream({
         model: "claude-sonnet-4-6",
         max_tokens: 1024,
-        system: PROMPTS.search,
+        system: [
+          {
+            type: "text",
+            text: PROMPTS.search,
+            cache_control: { type: "ephemeral" },
+          },
+        ],
         tools,
-        tool_choice:
-          turn === 0 ? { type: "tool", name: "web_search" } : { type: "auto" },
-        messages,
+        tool_choice: isLastTurn
+          ? { type: "none" }
+          : turn === 0
+          ? { type: "tool", name: "web_search" }
+          : { type: "auto" },
+        messages: isLastTurn
+          ? [
+              ...messages,
+              {
+                role: "user" as const,
+                content:
+                  "⚠️  IMPORTANT: You MUST respond with valid JSON now. No more tool calls. Use what you have found so far.",
+              },
+            ]
+          : messages,
       });
+
+      stream.on("message", (msg) => {
+        trackUsage(msg.usage);
+      });
+
+      const response = await stream.finalMessage();
 
       if (response.stop_reason === "end_turn") {
         const text = response.content
@@ -154,14 +184,38 @@ If search snippets are too short, use fetch_page on promising URLs before respon
           .trim();
 
         try {
-          const findings = JSON.parse(text) as ResearchFindings;
+          const parsed = JSON.parse(text);
+
+          if (!validateSchema(parsed)) {
+            const error = createError(
+              "PARSE_FAILED",
+              "searchSpoke",
+              "Claude returned invalid JSON schema",
+              { turn }
+            );
+            console.error(formatError(error));
+            return emptyFindings(subject);
+          }
+
+          const findings = parsed as ResearchFindings;
+
+          const missingRequired = validateFindings(findings);
+          if (missingRequired) {
+            console.log(`  ⚠️  Missing required fields: ${missingRequired} — escalating`);
+            return {
+              ...findings,
+              escalate: true,
+              escalateReason: `Missing required fields: ${missingRequired}`,
+            };
+          }
+
           return await routeByConfidence(findings);
         } catch (e) {
           const error = createError(
             "PARSE_FAILED",
             "searchSpoke",
             "Failed to parse JSON response",
-            { cause: e, turn },
+            { cause: e, turn }
           );
           console.error(formatError(error));
           return emptyFindings(subject);
@@ -171,9 +225,8 @@ If search snippets are too short, use fetch_page on promising URLs before respon
       if (response.stop_reason === "tool_use") {
         messages.push({ role: "assistant", content: response.content });
 
-        // --- Phase 1: collect all tool calls by type ---
         const toolBlocks = response.content.filter(
-          (b) => b.type === "tool_use",
+          (b) => b.type === "tool_use"
         ) as Anthropic.ToolUseBlock[];
 
         const searches = toolBlocks
@@ -183,55 +236,59 @@ If search snippets are too short, use fetch_page on promising URLs before respon
             query: (b.input as Record<string, string>).query,
           }));
 
-        const fetches = toolBlocks
-          .filter((b) => b.name === "fetch_page")
-          .slice(0, MAX_FETCHES) // limit concurrent fetches
-          .map((b) => ({
-            id: b.id,
-            url: (b.input as Record<string, string>).url,
-          }));
+        const allFetchBlocks = toolBlocks.filter((b) => b.name === "fetch_page");
 
-        const skippedFetches = toolBlocks
-          .filter((b) => b.name === "fetch_page")
-          .slice(MAX_FETCHES); // fetches beyond the limit
+        const fetches = allFetchBlocks
+          .slice(0, MAX_FETCHES - fetchCount)
+          .map((b) => {
+            fetchCount++;
+            return {
+              id: b.id,
+              url: (b.input as Record<string, string>).url,
+            };
+          });
 
-        // --- Phase 2: execute ---
+        const skippedFetches = allFetchBlocks.slice(fetches.length);
 
-        // searches sequentially (Claude rarely calls more than one)
         const toolResults: Anthropic.ToolResultBlockParam[] = [];
 
-        for (const s of searches) {
-          const result = await webSearch(s.query, subject);
+        // searches in parallel
+        const searchResults = await Promise.all(
+          searches.map(async (s) => {
+            emit("searching");
+            return { id: s.id, result: await webSearch(s.query, subject) };
+          })
+        );
+        searchResults.forEach((s) =>
           toolResults.push({
             type: "tool_result",
             tool_use_id: s.id,
-            content: result,
-          });
-        }
+            content: s.result,
+          })
+        );
 
-        // fetches in parallel — independent HTTP calls benefit from this
+        // fetches in parallel
         const fetchResults = await Promise.all(
           fetches.map(async (f) => {
             emit("fetching_page");
             console.log(`  [searchSpoke → fetch_page] ${f.url}`);
             return { id: f.id, result: await fetchPage(f.url) };
-          }),
+          })
         );
         fetchResults.forEach((f) =>
           toolResults.push({
             type: "tool_result",
             tool_use_id: f.id,
             content: f.result,
-          }),
+          })
         );
 
-        // skipped fetches beyond MAX_FETCHES
         skippedFetches.forEach((b) =>
           toolResults.push({
             type: "tool_result",
             tool_use_id: b.id,
             content: "fetch_page limit reached — skipping this URL",
-          }),
+          })
         );
 
         messages.push({ role: "user", content: toolResults });
@@ -241,7 +298,7 @@ If search snippets are too short, use fetch_page on promising URLs before respon
         "API_FAILED",
         "searchSpoke",
         "API call failed in search spoke",
-        { cause: e, turn },
+        { cause: e, turn }
       );
       console.error(formatError(error));
       return emptyFindings(subject);
@@ -251,7 +308,7 @@ If search snippets are too short, use fetch_page on promising URLs before respon
   const error = createError(
     "MAX_TURNS_REACHED",
     "searchSpoke",
-    `Search spoke reached max turns (${MAX_TURNS})`,
+    `Search spoke reached max turns (${MAX_TURNS})`
   );
   console.warn(formatError(error));
   return emptyFindings(subject);

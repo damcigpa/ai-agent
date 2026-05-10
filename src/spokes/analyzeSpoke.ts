@@ -4,6 +4,7 @@ import { webSearch } from "../tools/webSearch.js";
 import { fetchPage } from "../tools/fetchPage.js";
 import { createError, formatError } from "../errors.js";
 import { PROMPTS } from "../prompts.js";
+import { trackUsage } from "../tokenTracker.js";
 
 const MAX_TURNS = 5;
 
@@ -91,15 +92,27 @@ If a search result looks like a detailed analysis but the snippet is too short, 
 
   for (let turn = 0; turn < MAX_TURNS; turn++) {
     try {
-      const response = await client.messages.create({
+      const stream = client.messages.stream({
         model: "claude-sonnet-4-6",
         max_tokens: 2048,
-        system: PROMPTS.analyze,
+        system: [
+          {
+            type: "text",
+            text: PROMPTS.analyze,
+            cache_control: { type: "ephemeral" },
+          },
+        ],
         tools,
         tool_choice:
           turn === 0 ? { type: "tool", name: "web_search" } : { type: "auto" },
         messages,
       });
+
+      stream.on("message", (msg) => {
+        trackUsage(msg.usage);
+      });
+
+      const response = await stream.finalMessage();
 
       if (response.stop_reason === "end_turn") {
         const text = response.content

@@ -3,6 +3,8 @@ import { client } from "../client.js";
 import { createError, formatError } from "../errors.js";
 import { ResearchFindings } from "../types.js";
 import { PROMPTS } from "../prompts.js";
+import { trackUsage } from "../tokenTracker.js";
+import { StreamEvent } from "../progress.js";
 
 const MAX_TURNS = 3;
 
@@ -16,6 +18,7 @@ export interface Explanation {
 export async function explainSpoke(
   findings: ResearchFindings,
   userQuestion: string,
+  onEvent: (event: StreamEvent) => void,
 ): Promise<Explanation> {
   const messages: Anthropic.MessageParam[] = [
     {
@@ -39,12 +42,25 @@ Respond ONLY with a JSON object matching this exact shape, no explanation, no ma
 
   for (let turn = 0; turn < MAX_TURNS; turn++) {
     try {
-      const response = await client.messages.create({
+      const stream = client.messages.stream({
         model: "claude-sonnet-4-6",
         max_tokens: 2048,
-        system: PROMPTS.explain,
+        system: [
+          {
+            type: "text",
+            text: PROMPTS.explain,
+            cache_control: { type: "ephemeral" },
+          },
+        ],
         messages,
       });
+
+      // Post-tool hook — track usage
+      stream.on("message", (msg) => {
+        trackUsage(msg.usage);
+      });
+
+      const response = await stream.finalMessage();
 
       if (response.stop_reason === "end_turn") {
         const text = response.content
@@ -56,7 +72,10 @@ Respond ONLY with a JSON object matching this exact shape, no explanation, no ma
           .trim();
 
         try {
-          return JSON.parse(text) as Explanation;
+          const explanation = JSON.parse(text) as Explanation;
+          onEvent({ type: "chunk", data: explanation.summary });
+          onEvent({ type: "done", data: explanation.summary });
+          return explanation;
         } catch (e) {
           const error = createError(
             "PARSE_FAILED",
@@ -65,6 +84,7 @@ Respond ONLY with a JSON object matching this exact shape, no explanation, no ma
             { cause: e, turn },
           );
           console.error(formatError(error));
+          onEvent({ type: "error", data: "Failed to parse explanation" });
           return {
             summary: findings.context || "No explanation available",
             keyPoints: findings.keyFacts ?? [],
@@ -81,6 +101,7 @@ Respond ONLY with a JSON object matching this exact shape, no explanation, no ma
         { cause: e, turn },
       );
       console.error(formatError(error));
+      onEvent({ type: "error", data: (e as Error).message });
     }
   }
 

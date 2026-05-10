@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { client } from "../client.js";
 import { ResearchFindings } from "../types.js";
 import { AnalysisFindings } from "../spokes/analyzeSpoke.js";
+import { trackUsage } from "../tokenTracker.js";
 
 export interface CoverageResult {
   complete: boolean;
@@ -33,20 +34,25 @@ export async function needsSimplification(
 ): Promise<boolean> {
   const text = "synopsis" in content ? content.synopsis : content.context;
 
+  if (!text) return false;
+
   const response = await client.messages.create({
     model: "claude-sonnet-4-6",
     max_tokens: 50,
     messages: [
       {
         role: "user",
-        content: `Is this explanation too complex for a student to understand without further simplification?
+        content: `Does this text contain language that would be difficult for an eight grade student to understand without further explanation?
+Look for: technical jargon, latinisms, legal or economic terminology, complex academic language, or sophisticated arguments that assume prior knowledge.
 
-Content: "${text}"
+Text: "${text}"
 
 Reply with only YES or NO.`,
       },
     ],
   });
+
+  trackUsage(response.usage);
 
   const result = (response.content[0] as Anthropic.TextBlock).text
     .trim()

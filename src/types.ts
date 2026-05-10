@@ -5,6 +5,8 @@ export type Subject =
   | "history"
   | "science"
   | "literary_analysis"
+  | "hungarian_history"
+  | "hungarian_literature"
   | "general";
 
 export interface ResearchFindings {
@@ -19,3 +21,5 @@ export interface ResearchFindings {
   escalate?: boolean;
   escalateReason?: string;
 }
+
+export type LiteratureSubject = Extract<Subject, "literature" | "literary_analysis" | "hungarian_literature">;

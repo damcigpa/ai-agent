@@ -1,13 +1,11 @@
 import { searchSpoke } from "../spokes/searchSpoke.js";
 import { explainSpoke, Explanation } from "../spokes/explainSpoke.js";
 import { analyzeSpoke, AnalysisFindings } from "../spokes/analyzeSpoke.js";
-import { fileSpoke } from "../spokes/fileSpoke.js";
 import { ResearchFindings, Subject } from "../types.js";
-import { emit } from "../progress.js";
+import { emit, StreamEvent } from "../progress.js";
 import { evaluateCoverage, needsSimplification } from "./evaluate.js";
 import { aggregateFindings } from "./aggregate.js";
-import { formatOutput, formatAnalysis } from "./format.js";
-
+import { buildSearchContext } from "./context.js";
 const MAX_SEARCH_RETRIES = 2;
 
 export interface StepResult {
@@ -38,7 +36,7 @@ export async function executeSearchStep(
   subject: Subject,
   searchFindings: ResearchFindings | null,
   analysisFindings: AnalysisFindings | null,
-  explanation: Explanation | null,
+  explanation: Explanation | null
 ): Promise<StepResult> {
   emit("searching");
   const context = buildSearchContext({
@@ -56,7 +54,7 @@ export async function executeSearchStep(
     console.log("  🔄 Retrying with broader strategy...");
     const retryFindings = await searchSpoke(
       buildSearchContext({ userMessage, alreadyFound: null, missing: [] }),
-      subject,
+      subject
     );
     findings = retryFindings.escalate
       ? { ...retryFindings, escalate: false }
@@ -68,7 +66,7 @@ export async function executeSearchStep(
   console.log(
     complete
       ? `  ✅ Coverage complete (confidence: ${findings.confidence})`
-      : `  ⚠️  Missing: ${missing.join(", ")} — retrying...`,
+      : `  ⚠️  Missing: ${missing.join(", ")} — retrying...`
   );
 
   let retryCount = 0;
@@ -76,7 +74,7 @@ export async function executeSearchStep(
     emit("retrying");
     const retryFindings = await searchSpoke(
       buildSearchContext({ userMessage, alreadyFound: findings, missing }),
-      subject,
+      subject
     );
     findings = aggregateFindings(findings, retryFindings);
     ({ complete, missing } = evaluateCoverage(findings, userMessage));
@@ -84,7 +82,7 @@ export async function executeSearchStep(
     console.log(
       complete
         ? `  ✅ Coverage complete after retry ${retryCount}`
-        : `  ⚠️  Still missing: ${missing.join(", ")} (retry ${retryCount}/${MAX_SEARCH_RETRIES})`,
+        : `  ⚠️  Still missing: ${missing.join(", ")} (retry ${retryCount}/${MAX_SEARCH_RETRIES})`
     );
   }
 
@@ -100,7 +98,7 @@ export async function executeAnalyzeStep(
   userMessage: string,
   searchFindings: ResearchFindings | null,
   analysisFindings: AnalysisFindings | null,
-  explanation: Explanation | null,
+  explanation: Explanation | null
 ): Promise<StepResult> {
   emit("analyzing");
   console.log("  [hub → analyze_spoke]");
@@ -110,7 +108,7 @@ export async function executeAnalyzeStep(
   console.log(
     complex
       ? "  🔬 Analysis is complex — will run explainSpoke"
-      : "  ✅ Analysis is accessible — skipping explainSpoke",
+      : "  ✅ Analysis is accessible — skipping explainSpoke"
   );
 
   return {
@@ -127,6 +125,7 @@ export async function executeExplainStep(
   searchFindings: ResearchFindings | null,
   analysisFindings: AnalysisFindings | null,
   explanation: Explanation | null,
+  onEvent: (event: StreamEvent) => void
 ): Promise<StepResult> {
   const findingsToExplain = analysisFindings
     ? analysisToResearch(analysisFindings)
@@ -143,45 +142,13 @@ export async function executeExplainStep(
 
   emit("explaining");
   console.log("  [hub → explain_spoke]");
-  const exp = await explainSpoke(findingsToExplain, userMessage);
+  const exp = await explainSpoke(findingsToExplain, userMessage, onEvent);
 
   return {
     result: exp.summary,
     updatedFindings: searchFindings,
     updatedAnalysis: analysisFindings,
     updatedExplanation: exp,
-  };
-}
-
-export async function executeFileStep(
-  userMessage: string,
-  searchFindings: ResearchFindings | null,
-  analysisFindings: AnalysisFindings | null,
-  explanation: Explanation | null,
-): Promise<StepResult> {
-  emit("writing");
-  const emptyFindings: ResearchFindings = {
-    author: "",
-    work: "",
-    date: "",
-    context: "",
-    confidence: "low",
-    sources: [],
-  };
-
-  const content = analysisFindings
-    ? formatAnalysis(analysisFindings, explanation, userMessage)
-    : formatOutput(searchFindings ?? emptyFindings, explanation, userMessage);
-
-  const result = await fileSpoke(
-    `Write the following to output.txt:\n\n${content}`,
-  );
-
-  return {
-    result,
-    updatedFindings: searchFindings,
-    updatedAnalysis: analysisFindings,
-    updatedExplanation: explanation,
   };
 }
 
@@ -194,44 +161,20 @@ export async function executeStep(
   searchFindings: ResearchFindings | null,
   analysisFindings: AnalysisFindings | null,
   explanation: Explanation | null,
+  onEvent: (event: StreamEvent) => void
 ): Promise<StepResult> {
   const stepLower = step.toLowerCase();
 
-  if (stepLower.includes("search") || stepLower.includes("find")) {
-    return executeSearchStep(
-      userMessage,
-      subject,
-      searchFindings,
-      analysisFindings,
-      explanation,
-    );
+  if (stepLower.includes("explain")) {
+    return executeExplainStep(userMessage, searchFindings, analysisFindings, explanation, onEvent);
   }
 
   if (stepLower.includes("analyz")) {
-    return executeAnalyzeStep(
-      userMessage,
-      searchFindings,
-      analysisFindings,
-      explanation,
-    );
+    return executeAnalyzeStep(userMessage, searchFindings, analysisFindings, explanation);
   }
 
-  if (stepLower.includes("explain")) {
-    return executeExplainStep(
-      userMessage,
-      searchFindings,
-      analysisFindings,
-      explanation,
-    );
-  }
-
-  if (stepLower.includes("write") || stepLower.includes("file")) {
-    return executeFileStep(
-      userMessage,
-      searchFindings,
-      analysisFindings,
-      explanation,
-    );
+  if (stepLower.includes("search") || /\bfind\b/.test(stepLower)) {
+    return executeSearchStep(userMessage, subject, searchFindings, analysisFindings, explanation);
   }
 
   return {

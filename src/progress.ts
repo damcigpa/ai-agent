@@ -1,3 +1,11 @@
+// --- Stream event types ---
+
+export type StreamEvent =
+  | { type: "progress"; data: string }
+  | { type: "chunk"; data: string }
+  | { type: "done"; data: string }
+  | { type: "error"; data: string };
+
 // --- Progress event types ---
 
 export type ProgressEvent =
@@ -8,7 +16,6 @@ export type ProgressEvent =
   | "verifying"
   | "analyzing"
   | "explaining"
-  | "writing"
   | "retrying"
   | "escalating"
   | "adapting_plan"
@@ -29,7 +36,6 @@ function defaultHandler(event: ProgressEvent, detail?: string) {
     verifying: "✅ Verifying findings...",
     analyzing: "📖 Analyzing...",
     explaining: "💡 Generating explanation...",
-    writing: "✍️  Writing to output.txt...",
     retrying: "🔄 Retrying search...",
     escalating: "🔺 Escalating to broader search...",
     adapting_plan: "🔄 Adapting plan...",

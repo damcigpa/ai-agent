@@ -1,7 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { hub } from "./hub/index.js";
 import { createError, formatError, formatUserError } from "./errors.js";
-import { emit } from "./progress.js";
+import { getUsageWarning } from "./tokenTracker.js";
+import { StreamEvent } from "./progress.js";
 
 const messages: { role: string; content: string }[] = [];
 
@@ -26,10 +27,37 @@ export async function chat(userMessage: string): Promise<string> {
   messages.push({ role: "user", content: userMessage });
 
   try {
-    const response = await hub(applyCache(messages));
+    const stream = hub(applyCache(messages));
+    const reader = stream.getReader();
+
+    let finalResponse = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const event = value as StreamEvent;
+
+      switch (event.type) {
+        case "progress":
+          console.log(event.data);
+          break;
+        case "chunk":
+          process.stdout.write(event.data);
+          break;
+        case "done":
+          finalResponse = event.data;
+          console.log("\n");
+          break;
+        case "error":
+          console.error(`Error: ${event.data}`);
+          break;
+      }
+    }
+
+    const warning = getUsageWarning();
+    const response = warning ? `${finalResponse}${warning}` : finalResponse;
     messages.push({ role: "assistant", content: response });
-    emit("done");
-    console.log(`\nClaude: ${response}\n`);
     return response;
   } catch (e) {
     const error = createError(

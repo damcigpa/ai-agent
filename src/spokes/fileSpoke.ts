@@ -4,6 +4,7 @@ import { readFile } from "../tools/readFile.js";
 import { writeFile } from "../tools/writeFile.js";
 import { createError, formatError } from "../errors.js";
 import { PROMPTS } from "../prompts.js";
+import { trackUsage } from "../tokenTracker.js";
 
 const MAX_TURNS = 3;
 
@@ -41,11 +42,19 @@ export async function fileSpoke(task: string): Promise<string> {
       const response = await client.messages.create({
         model: "claude-sonnet-4-6",
         max_tokens: 2048,
-        system: PROMPTS.file,
+        system: [
+          {
+            type: "text",
+            text: PROMPTS.file,
+            cache_control: { type: "ephemeral" },
+          },
+        ],
         tools,
         tool_choice: { type: "tool", name: "write_file" },
         messages,
       });
+
+      trackUsage(response.usage);
 
       if (response.stop_reason === "end_turn") {
         return response.content
