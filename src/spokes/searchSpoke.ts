@@ -86,8 +86,8 @@ function validateFindings(findings: ResearchFindings): string | null {
     return null;
   }
 
-  if (!findings.author && !findings.work) {
-    return "author and work both missing for literature question";
+  if (!findings.author && !findings.work && !findings.context) {
+    return "no useful information found for literature question";
   }
 
   return null;
