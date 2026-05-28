@@ -4,7 +4,11 @@ import { createError, formatError, formatUserError } from "./errors.js";
 import { getUsageWarning } from "./tokenTracker.js";
 import { StreamEvent } from "./progress.js";
 
+export const MODEL_HAIKU = "claude-haiku-4-5-20251001";
+export const MODEL_SONNET = "claude-sonnet-4-6";
+
 const messages: { role: string; content: string }[] = [];
+let currentModel = MODEL_HAIKU;
 
 function applyCache(
   messages: { role: string; content: string }[],
@@ -24,10 +28,20 @@ function applyCache(
 }
 
 export async function chat(userMessage: string): Promise<string> {
+  // detect model switch commands
+  if (/use sonnet/i.test(userMessage)) {
+    currentModel = MODEL_SONNET;
+    return `Switched to Sonnet — better quality, slower responses.`;
+  }
+  if (/use haiku/i.test(userMessage)) {
+    currentModel = MODEL_HAIKU;
+    return `Switched to Haiku — faster responses.`;
+  }
+
   messages.push({ role: "user", content: userMessage });
 
   try {
-    const stream = hub(applyCache(messages));
+    const stream = hub(applyCache(messages), currentModel);
     const reader = stream.getReader();
 
     let finalResponse = "";

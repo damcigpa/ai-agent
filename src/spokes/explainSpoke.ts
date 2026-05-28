@@ -19,7 +19,8 @@ export async function explainSpoke(
   findings: ResearchFindings,
   userQuestion: string,
   onEvent: (event: StreamEvent) => void,
-  analysisMode: boolean = false
+  analysisMode: boolean = false,
+  model: string = "claude-haiku-4-5-20251001",
 ): Promise<Explanation> {
   const analysisInstructions = analysisMode
     ? `Provide a DEEP literary analysis including:
@@ -56,7 +57,7 @@ Respond ONLY with a JSON object matching this exact shape, no explanation, no ma
   for (let turn = 0; turn < MAX_TURNS; turn++) {
     try {
       const stream = client.messages.stream({
-        model: "claude-sonnet-4-6",
+        model,
         max_tokens: 2048,
         system: [
           {
@@ -94,7 +95,7 @@ Respond ONLY with a JSON object matching this exact shape, no explanation, no ma
             "PARSE_FAILED",
             "searchSpoke",
             "Failed to parse explanation JSON",
-            { cause: e, turn }
+            { cause: e, turn },
           );
           console.error(formatError(error));
           onEvent({ type: "error", data: "Failed to parse explanation" });
@@ -111,7 +112,7 @@ Respond ONLY with a JSON object matching this exact shape, no explanation, no ma
         "API_FAILED",
         "searchSpoke",
         "API call failed in explain spoke",
-        { cause: e, turn }
+        { cause: e, turn },
       );
       console.error(formatError(error));
       onEvent({ type: "error", data: (e as Error).message });
@@ -121,7 +122,7 @@ Respond ONLY with a JSON object matching this exact shape, no explanation, no ma
   const error = createError(
     "MAX_TURNS_REACHED",
     "searchSpoke",
-    `Explain spoke reached max turns (${MAX_TURNS})`
+    `Explain spoke reached max turns (${MAX_TURNS})`,
   );
   console.warn(formatError(error));
   return {

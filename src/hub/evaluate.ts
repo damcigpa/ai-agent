@@ -37,12 +37,12 @@ export async function needsSimplification(
   if (!text) return false;
 
   const response = await client.messages.create({
-    model: "claude-sonnet-4-6",
+    model: "claude-haiku-4-5-20251001",
     max_tokens: 50,
     messages: [
       {
         role: "user",
-        content: `Does this text contain language that would be difficult for an eight grade student to understand without further explanation?
+        content: `Does this text contain language that would be difficult for a student to understand without further explanation?
 Look for: technical jargon, latinisms, legal or economic terminology, complex academic language, or sophisticated arguments that assume prior knowledge.
 
 Text: "${text}"

@@ -6,17 +6,22 @@ import { trackUsage } from "../tokenTracker.js";
 
 export async function detectSubjectAndDecompose(
   userMessage: string,
-  previousTopic: string = ""
-): Promise<{ subject: Subject; steps: string[]; newTopic: boolean; topic: string }> {
+  previousTopic: string = "",
+): Promise<{
+  subject: Subject;
+  steps: string[];
+  newTopic: boolean;
+  topic: string;
+}> {
   const response = await client.messages.create({
-    model: "claude-sonnet-4-6",
+    model: "claude-haiku-4-5-20251001",
     max_tokens: 512,
     system: [
       {
         type: "text",
         text: PROMPTS.hub,
         cache_control: { type: "ephemeral" },
-      }
+      },
     ],
     messages: [
       {
@@ -88,19 +93,19 @@ Reply with only a JSON object, no explanation. Examples:
 export async function replan(
   remainingSteps: string[],
   completedStep: string,
-  findings: ResearchFindings
+  findings: ResearchFindings,
 ): Promise<string[]> {
   if (remainingSteps.length <= 1) return remainingSteps;
 
   const response = await client.messages.create({
-    model: "claude-sonnet-4-6",
+    model: "claude-haiku-4-5-20251001",
     max_tokens: 128,
     system: [
       {
         type: "text",
         text: PROMPTS.hub,
         cache_control: { type: "ephemeral" },
-      }
+      },
     ],
     messages: [
       {

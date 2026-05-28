@@ -66,7 +66,10 @@ export function emptyAnalysis(): AnalysisFindings {
   };
 }
 
-export async function analyzeSpoke(task: string): Promise<AnalysisFindings> {
+export async function analyzeSpoke(
+  task: string,
+  model: string = "claude-haiku-4-5-20251001",
+): Promise<AnalysisFindings> {
   const messages: Anthropic.MessageParam[] = [
     {
       role: "user",
@@ -93,7 +96,7 @@ If a search result looks like a detailed analysis but the snippet is too short, 
   for (let turn = 0; turn < MAX_TURNS; turn++) {
     try {
       const stream = client.messages.stream({
-        model: "claude-sonnet-4-6",
+        model,
         max_tokens: 2048,
         system: [
           {

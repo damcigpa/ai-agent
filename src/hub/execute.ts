@@ -36,7 +36,8 @@ export async function executeSearchStep(
   subject: Subject,
   searchFindings: ResearchFindings | null,
   analysisFindings: AnalysisFindings | null,
-  explanation: Explanation | null
+  explanation: Explanation | null,
+  model: string,
 ): Promise<StepResult> {
   emit("searching");
   const context = buildSearchContext({
@@ -45,7 +46,7 @@ export async function executeSearchStep(
     missing: [],
   });
 
-  let findings = await searchSpoke(context, subject);
+  let findings = await searchSpoke(context, subject, model);
 
   // Handle escalation
   if (findings.escalate) {
@@ -54,7 +55,8 @@ export async function executeSearchStep(
     console.log("  🔄 Retrying with broader strategy...");
     const retryFindings = await searchSpoke(
       buildSearchContext({ userMessage, alreadyFound: null, missing: [] }),
-      subject
+      subject,
+      model,
     );
     findings = retryFindings.escalate
       ? { ...retryFindings, escalate: false }
@@ -66,7 +68,7 @@ export async function executeSearchStep(
   console.log(
     complete
       ? `  ✅ Coverage complete (confidence: ${findings.confidence})`
-      : `  ⚠️  Missing: ${missing.join(", ")} — retrying...`
+      : `  ⚠️  Missing: ${missing.join(", ")} — retrying...`,
   );
 
   let retryCount = 0;
@@ -74,7 +76,8 @@ export async function executeSearchStep(
     emit("retrying");
     const retryFindings = await searchSpoke(
       buildSearchContext({ userMessage, alreadyFound: findings, missing }),
-      subject
+      subject,
+      model,
     );
     findings = aggregateFindings(findings, retryFindings);
     ({ complete, missing } = evaluateCoverage(findings, userMessage));
@@ -82,7 +85,7 @@ export async function executeSearchStep(
     console.log(
       complete
         ? `  ✅ Coverage complete after retry ${retryCount}`
-        : `  ⚠️  Still missing: ${missing.join(", ")} (retry ${retryCount}/${MAX_SEARCH_RETRIES})`
+        : `  ⚠️  Still missing: ${missing.join(", ")} (retry ${retryCount}/${MAX_SEARCH_RETRIES})`,
     );
   }
 
@@ -98,17 +101,18 @@ export async function executeAnalyzeStep(
   userMessage: string,
   searchFindings: ResearchFindings | null,
   analysisFindings: AnalysisFindings | null,
-  explanation: Explanation | null
+  explanation: Explanation | null,
+  model: string,
 ): Promise<StepResult> {
   emit("analyzing");
   console.log("  [hub → analyze_spoke]");
-  const analysis = await analyzeSpoke(userMessage);
+  const analysis = await analyzeSpoke(userMessage, model);
 
   const complex = await needsSimplification(analysis);
   console.log(
     complex
       ? "  🔬 Analysis is complex — will run explainSpoke"
-      : "  ✅ Analysis is accessible — skipping explainSpoke"
+      : "  ✅ Analysis is accessible — skipping explainSpoke",
   );
 
   return {
@@ -125,7 +129,8 @@ export async function executeExplainStep(
   searchFindings: ResearchFindings | null,
   analysisFindings: AnalysisFindings | null,
   explanation: Explanation | null,
-  onEvent: (event: StreamEvent) => void
+  onEvent: (event: StreamEvent) => void,
+  model: string,
 ): Promise<StepResult> {
   const findingsToExplain = analysisFindings
     ? analysisToResearch(analysisFindings)
@@ -143,8 +148,17 @@ export async function executeExplainStep(
   emit("explaining");
   console.log("  [hub → explain_spoke]");
 
-  const analysisMode = /elemz|analyz|témák|stílus|szerkezet|műfaj|themes|literary devices|interpret/i.test(userMessage);
-  const exp = await explainSpoke(findingsToExplain, userMessage, onEvent, analysisMode);
+  const analysisMode =
+    /elemz|analyz|témák|stílus|szerkezet|műfaj|themes|literary devices|interpret/i.test(
+      userMessage,
+    );
+  const exp = await explainSpoke(
+    findingsToExplain,
+    userMessage,
+    onEvent,
+    analysisMode,
+    model,
+  );
 
   return {
     result: exp.summary,
@@ -163,20 +177,41 @@ export async function executeStep(
   searchFindings: ResearchFindings | null,
   analysisFindings: AnalysisFindings | null,
   explanation: Explanation | null,
-  onEvent: (event: StreamEvent) => void
+  onEvent: (event: StreamEvent) => void,
+  model: string,
 ): Promise<StepResult> {
   const stepLower = step.toLowerCase();
 
   if (stepLower.includes("explain")) {
-    return executeExplainStep(userMessage, searchFindings, analysisFindings, explanation, onEvent);
+    return executeExplainStep(
+      userMessage,
+      searchFindings,
+      analysisFindings,
+      explanation,
+      onEvent,
+      model,
+    );
   }
 
   if (stepLower.includes("analyz")) {
-    return executeAnalyzeStep(userMessage, searchFindings, analysisFindings, explanation);
+    return executeAnalyzeStep(
+      userMessage,
+      searchFindings,
+      analysisFindings,
+      explanation,
+      model,
+    );
   }
 
   if (stepLower.includes("search") || stepLower.includes("find")) {
-    return executeSearchStep(userMessage, subject, searchFindings, analysisFindings, explanation);
+    return executeSearchStep(
+      userMessage,
+      subject,
+      searchFindings,
+      analysisFindings,
+      explanation,
+      model,
+    );
   }
 
   return {

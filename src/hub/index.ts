@@ -7,7 +7,11 @@ import { detectSubjectAndDecompose, replan } from "./decompose.js";
 import { executeStep } from "./execute.js";
 import { formatOutput, formatAnalysis } from "./format.js";
 import { emit, StreamEvent } from "../progress.js";
-import { readScratchpad, resetScratchpad, updateScratchpad } from "../tools/scratchpad.js";
+import {
+  readScratchpad,
+  resetScratchpad,
+  updateScratchpad,
+} from "../tools/scratchpad.js";
 
 const MAX_TURNS = 10;
 
@@ -20,7 +24,10 @@ const emptyFindings: ResearchFindings = {
   sources: [],
 };
 
-export function hub(messages: Anthropic.MessageParam[]): ReadableStream<StreamEvent> {
+export function hub(
+  messages: Anthropic.MessageParam[],
+  model: string = "claude-haiku-4-5-20251001",
+): ReadableStream<StreamEvent> {
   return new ReadableStream<StreamEvent>({
     async start(controller) {
       const enqueue = (event: StreamEvent) => controller.enqueue(event);
@@ -37,11 +44,12 @@ export function hub(messages: Anthropic.MessageParam[]): ReadableStream<StreamEv
         const previousTopic = scratchpad?.topic ?? "";
 
         // 2. Detect subject, decompose, check new topic
-        enqueue({ type: "progress", data: "🔍 Detecting subject and planning steps..." });
-        const { subject, steps, newTopic, topic } = await detectSubjectAndDecompose(
-          userMessage,
-          previousTopic
-        );
+        enqueue({
+          type: "progress",
+          data: "🔍 Detecting subject and planning steps...",
+        });
+        const { subject, steps, newTopic, topic } =
+          await detectSubjectAndDecompose(userMessage, previousTopic);
 
         if (newTopic) resetScratchpad();
 
@@ -61,7 +69,10 @@ export function hub(messages: Anthropic.MessageParam[]): ReadableStream<StreamEv
             : null;
 
         if (searchFindings) {
-          enqueue({ type: "progress", data: "📦 Reusing findings from previous turn" });
+          enqueue({
+            type: "progress",
+            data: "📦 Reusing findings from previous turn",
+          });
         }
 
         let explanation: Explanation | null = null;
@@ -80,7 +91,8 @@ export function hub(messages: Anthropic.MessageParam[]): ReadableStream<StreamEv
               searchFindings,
               analysisFindings,
               explanation,
-              enqueue
+              enqueue,
+              model,
             );
 
           searchFindings = updatedFindings;
@@ -90,16 +102,22 @@ export function hub(messages: Anthropic.MessageParam[]): ReadableStream<StreamEv
           if (currentStep.toLowerCase().includes("analyz")) {
             if (updatedAnalysis?.synopsis) {
               // Analysis succeeded — insert explain step if complex
-              if (updatedExplanation === null && !remainingSteps.some(s => s.toLowerCase().includes("explain"))) {
+              if (updatedExplanation === null) {
                 remainingSteps = [
                   "explain the analysis in accessible terms",
                   ...remainingSteps,
                 ];
-                enqueue({ type: "progress", data: "🔄 Inserted explain step due to complexity" });
+                enqueue({
+                  type: "progress",
+                  data: "🔄 Inserted explain step due to complexity",
+                });
               }
             } else {
               // Analysis failed — fall back to search
-              enqueue({ type: "progress", data: "⚠️  Analysis failed — falling back to search" });
+              enqueue({
+                type: "progress",
+                data: "⚠️  Analysis failed — falling back to search",
+              });
               remainingSteps = [
                 `search for information about: ${userMessage}`,
                 "explain the findings clearly",
@@ -117,10 +135,10 @@ export function hub(messages: Anthropic.MessageParam[]): ReadableStream<StreamEv
               topic,
               findings: updatedFindings
                 ? [...(scratchpad?.findings ?? []), updatedFindings]
-                : scratchpad?.findings ?? [],
+                : (scratchpad?.findings ?? []),
               analysis: updatedAnalysis
                 ? [...(scratchpad?.analysis ?? []), updatedAnalysis]
-                : scratchpad?.analysis ?? [],
+                : (scratchpad?.analysis ?? []),
               conversationTopics: [
                 ...(scratchpad?.conversationTopics ?? []),
                 userMessage,
@@ -135,8 +153,14 @@ export function hub(messages: Anthropic.MessageParam[]): ReadableStream<StreamEv
             remainingSteps.length > 1;
 
           if (shouldReplan) {
-            const adaptedSteps = await replan(remainingSteps, currentStep, searchFindings!);
-            if (JSON.stringify(adaptedSteps) !== JSON.stringify(remainingSteps)) {
+            const adaptedSteps = await replan(
+              remainingSteps,
+              currentStep,
+              searchFindings!,
+            );
+            if (
+              JSON.stringify(adaptedSteps) !== JSON.stringify(remainingSteps)
+            ) {
               enqueue({ type: "progress", data: "🔄 Plan adapted" });
             }
             remainingSteps = adaptedSteps;
@@ -144,17 +168,27 @@ export function hub(messages: Anthropic.MessageParam[]): ReadableStream<StreamEv
         }
 
         if (turn >= MAX_TURNS) {
-          const error = createError("MAX_TURNS_REACHED", "hub", `Hub reached max turns (${MAX_TURNS})`);
+          const error = createError(
+            "MAX_TURNS_REACHED",
+            "hub",
+            `Hub reached max turns (${MAX_TURNS})`,
+          );
           console.warn(formatError(error));
         }
 
         const finalOutput = analysisFindings
           ? formatAnalysis(analysisFindings, explanation, userMessage)
-          : formatOutput(searchFindings ?? emptyFindings, explanation, userMessage);
+          : formatOutput(
+              searchFindings ?? emptyFindings,
+              explanation,
+              userMessage,
+            );
 
         enqueue({ type: "done", data: finalOutput });
       } catch (e) {
-        const error = createError("HUB_FAILED", "hub", "Hub failed", { cause: e });
+        const error = createError("HUB_FAILED", "hub", "Hub failed", {
+          cause: e,
+        });
         console.error(formatError(error));
         enqueue({ type: "error", data: (e as Error).message });
       } finally {
