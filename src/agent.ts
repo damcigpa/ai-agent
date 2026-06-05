@@ -4,6 +4,8 @@ import { createError, formatError, formatUserError } from "./errors.js";
 import { getUsageWarning } from "./tokenTracker.js";
 import { StreamEvent } from "./progress.js";
 
+import { sanitizeInput } from "./security.js";
+
 export const MODEL_HAIKU = "claude-haiku-4-5-20251001";
 export const MODEL_SONNET = "claude-sonnet-4-6";
 
@@ -11,7 +13,7 @@ const messages: { role: string; content: string }[] = [];
 let currentModel = MODEL_HAIKU;
 
 function applyCache(
-  messages: { role: string; content: string }[],
+  messages: { role: string; content: string }[]
 ): Anthropic.MessageParam[] {
   return messages.map((msg, index) => ({
     role: msg.role as "user" | "assistant",
@@ -38,7 +40,12 @@ export async function chat(userMessage: string): Promise<string> {
     return `Switched to Haiku — faster responses.`;
   }
 
-  messages.push({ role: "user", content: userMessage });
+  const sanitized = sanitizeInput(userMessage);
+  if (!sanitized) {
+    return "I'm sorry, I cannot process that request.";
+  }
+
+  messages.push({ role: "user", content: sanitized });
 
   try {
     const stream = hub(applyCache(messages), currentModel);
@@ -74,12 +81,7 @@ export async function chat(userMessage: string): Promise<string> {
     messages.push({ role: "assistant", content: response });
     return response;
   } catch (e) {
-    const error = createError(
-      "HUB_FAILED",
-      "agent",
-      "Hub failed to process message",
-      { cause: e },
-    );
+    const error = createError("HUB_FAILED", "agent", "Hub failed to process message", { cause: e });
     console.error(formatError(error));
     const userFacing = formatUserError(error);
     messages.push({ role: "assistant", content: userFacing });

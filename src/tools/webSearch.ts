@@ -1,6 +1,7 @@
 import { tavily } from "@tavily/core";
 import { createError, formatError } from "../errors.js";
 import { Subject } from "../types.js";
+import { sanitizeSearchResults } from "../security.js";
 
 const client = tavily({ apiKey: process.env.TAVILY_API_KEY ?? "" });
 
@@ -66,7 +67,10 @@ export async function webSearch(
         ...(includeDomains.length > 0 && { includeDomains }),
       }),
       new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("Search timed out after 15s")), SEARCH_TIMEOUT_MS),
+        setTimeout(
+          () => reject(new Error("Search timed out after 15s")),
+          SEARCH_TIMEOUT_MS,
+        ),
       ),
     ]);
 
@@ -78,7 +82,7 @@ export async function webSearch(
       .map((r) => `- ${r.title}\n  ${r.url}\n  ${r.content}`)
       .join("\n\n");
 
-    return `Search results for '${query}':\n\n${formatted}`;
+    return sanitizeSearchResults(`Search results for '${query}':\n\n${formatted}`);
   } catch (e) {
     const error = createError(
       "SEARCH_FAILED",

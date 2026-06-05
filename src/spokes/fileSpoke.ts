@@ -3,7 +3,7 @@ import { client } from "../client.js";
 import { readFile } from "../tools/readFile.js";
 import { writeFile } from "../tools/writeFile.js";
 import { createError, formatError } from "../errors.js";
-import { PROMPTS } from "../prompts.js";
+import { PROMPTS } from "../PROMPTS.1.js";
 import { trackUsage } from "../tokenTracker.js";
 
 const MAX_TURNS = 3;

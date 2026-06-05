@@ -13,6 +13,45 @@ export async function detectSubjectAndDecompose(
   newTopic: boolean;
   topic: string;
 }> {
+  const tools: Anthropic.Tool[] = [
+    {
+      name: "plan_task",
+      description:
+        "Plan the task by classifying the subject and breaking it into steps",
+      input_schema: {
+        type: "object",
+        properties: {
+          subject: {
+            type: "string",
+            enum: [
+              "literature",
+              "history",
+              "science",
+              "literary_analysis",
+              "hungarian_history",
+              "hungarian_literature",
+            ],
+          },
+          topic: {
+            type: "string",
+            description: "The specific topic of the question",
+          },
+          newTopic: {
+            type: "boolean",
+            description:
+              "Whether this is a new topic compared to the previous one",
+          },
+          steps: {
+            type: "array",
+            items: { type: "string" },
+            description: "Ordered list of steps to execute",
+          },
+        },
+        required: ["subject", "topic", "newTopic", "steps"],
+      },
+    },
+  ];
+
   const response = await client.messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 512,
@@ -23,12 +62,14 @@ export async function detectSubjectAndDecompose(
         cache_control: { type: "ephemeral" },
       },
     ],
+    tools,
+    tool_choice: { type: "tool", name: "plan_task" },
     messages: [
       {
         role: "user",
         content: `Classify this question into a subject, break it into ordered steps, identify the topic, and determine if it's a new topic compared to the previous one.
 
-Available subjects: literature, history, science, literary_analysis, hungarian_history, hungarian_literature, general
+Available subjects: literature, history, science, literary_analysis, hungarian_history, hungarian_literature
 
 Available agents:
 - search_spoke: searches the web for accurate information
@@ -51,43 +92,43 @@ Rules for including analyze_spoke:
 Previous topic: "${previousTopic || "none"}"
 Current question: "${userMessage}"
 
-Reply with only a JSON object, no explanation. Examples:
-{ "subject": "history", "topic": "Caesar crossing Rubicon date", "newTopic": true, "steps": ["search for information about: when did Caesar cross the Rubicon"] }
-{ "subject": "history", "topic": "Napoleon's laws", "newTopic": true, "steps": ["search for information about: Napoleon's laws", "explain the findings clearly"] }
-{ "subject": "literary_analysis", "topic": "Hamlet themes", "newTopic": true, "steps": ["analyze the work", "explain the analysis in accessible terms"] }
-{ "subject": "hungarian_history", "topic": "Rákóczi szabadságharc", "newTopic": true, "steps": ["search for information about: Rákóczi Ferenc szabadságharca", "explain the findings clearly"] }
-{ "subject": "hungarian_literature", "topic": "Pannónia dicsérete elemzés", "newTopic": true, "steps": ["search for information about: Janus Pannonius Pannónia dicsérete elemzés", "explain the findings clearly"] }
-{ "subject": "history", "topic": "Napoleon's laws", "newTopic": false, "steps": ["search for information about: economic effects of Napoleon's laws", "explain the findings clearly"] }`,
+Examples of correct plans:
+{ subject: "history", topic: "Caesar crossing Rubicon date", newTopic: true, steps: ["search for information about: when did Caesar cross the Rubicon"] }
+{ subject: "history", topic: "Napoleon's laws", newTopic: true, steps: ["search for information about: Napoleon's laws", "explain the findings clearly"] }
+{ subject: "literary_analysis", topic: "Hamlet themes", newTopic: true, steps: ["analyze the work", "explain the analysis in accessible terms"] }
+{ subject: "hungarian_history", topic: "Rákóczi szabadságharc", newTopic: true, steps: ["search for information about: Rákóczi Ferenc szabadságharca", "explain the findings clearly"] }
+{ subject: "hungarian_literature", topic: "Pannónia dicsérete", newTopic: true, steps: ["search for information about: Janus Pannonius Pannónia dicsérete elemzés", "explain the findings clearly"] }`,
       },
     ],
   });
 
   trackUsage(response.usage);
 
-  const text = (response.content[0] as Anthropic.TextBlock).text
-    .trim()
-    .replace(/```json|```/g, "")
-    .trim();
+  // Extract structured output from tool use block
+  const toolUse = response.content.find((b) => b.type === "tool_use") as
+    | Anthropic.ToolUseBlock
+    | undefined;
 
-  try {
-    const parsed = JSON.parse(text) as {
+  if (toolUse) {
+    const input = toolUse.input as {
       subject: Subject;
       steps: string[];
       newTopic: boolean;
       topic: string;
     };
-    return parsed;
-  } catch {
-    return {
-      subject: "general",
-      topic: userMessage,
-      newTopic: true,
-      steps: [
-        `search for information about: ${userMessage}`,
-        "explain the findings clearly",
-      ],
-    };
+    return input;
   }
+
+  // Fallback
+  return {
+    subject: "general",
+    topic: userMessage,
+    newTopic: true,
+    steps: [
+      `search for information about: ${userMessage}`,
+      "explain the findings clearly",
+    ],
+  };
 }
 
 export async function replan(
@@ -119,7 +160,6 @@ Current findings: ${JSON.stringify(findings, null, 2)}
 Rules:
 - If confidence is low, add another search step before explaining
 - If confidence is high, keep remaining steps as is
-- Always end with file_spoke to write to output.txt
 
 Reply with only a JSON array of remaining steps, nothing else.`,
       },

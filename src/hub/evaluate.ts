@@ -43,7 +43,15 @@ export async function needsSimplification(
       {
         role: "user",
         content: `Does this text contain language that would be difficult for a student to understand without further explanation?
-Look for: technical jargon, latinisms, legal or economic terminology, complex academic language, or sophisticated arguments that assume prior knowledge.
+
+        Do not flag these as complex:
+        allegória, epigramma, humanizmus, szimbolizmus, metafora, reneszánsz, barokk, realizmus
+
+        Flag as YES only if it contains:
+        - Latin phrases used without explanation
+        - Legal or economic terminology (lex, hegemony, bourgeoisie)
+        - Academic abstractions that assume university-level knowledge
+        - Overly complex sentence structures a 14 year old would struggle with
 
 Text: "${text}"
 
