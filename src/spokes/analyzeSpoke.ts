@@ -28,12 +28,29 @@ const tools: Anthropic.Tool[] = [
     input_schema: {
       type: "object",
       properties: {
-        url: {
-          type: "string",
-          description: "The full URL of the page to fetch",
-        },
+        url: { type: "string", description: "The full URL of the page to fetch" },
       },
       required: ["url"],
+    },
+  },
+  {
+    name: "submit_analysis",
+    description: "Submit the final literary analysis as structured data",
+    input_schema: {
+      type: "object",
+      properties: {
+        title: { type: "string" },
+        author: { type: "string" },
+        period: { type: "string" },
+        synopsis: { type: "string" },
+        themes: { type: "array", items: { type: "string" } },
+        literaryDevices: { type: "array", items: { type: "string" } },
+        criticalPerspectives: { type: "array", items: { type: "string" } },
+        significance: { type: "string" },
+        confidence: { type: "string", enum: ["high", "medium", "low"] },
+        sources: { type: "array", items: { type: "string" } },
+      },
+      required: ["title", "author", "period", "synopsis", "themes", "literaryDevices", "criticalPerspectives", "significance", "confidence", "sources"],
     },
   },
 ];
@@ -66,30 +83,14 @@ export function emptyAnalysis(): AnalysisFindings {
   };
 }
 
-export async function analyzeSpoke(
-  task: string,
-  model: string = "claude-haiku-4-5-20251001",
-): Promise<AnalysisFindings> {
+export async function analyzeSpoke(task: string, model: string = "claude-haiku-4-5-20251001"): Promise<AnalysisFindings> {
   const messages: Anthropic.MessageParam[] = [
     {
       role: "user",
       content: `${task}
 
-You must respond ONLY with a JSON object matching this exact shape, no explanation, no markdown:
-{
-  "title": "title of the work",
-  "author": "author of the work",
-  "period": "literary period or date",
-  "synopsis": "brief summary of the work",
-  "themes": ["theme1", "theme2", "theme3"],
-  "literaryDevices": ["device1: example", "device2: example"],
-  "criticalPerspectives": ["perspective1", "perspective2"],
-  "significance": "why this work matters in literary history",
-  "confidence": "high" | "medium" | "low",
-  "sources": ["url1", "url2"]
-}
-
-If a search result looks like a detailed analysis but the snippet is too short, use fetch_page to read the full article.`,
+If a search result looks like a detailed analysis but the snippet is too short, use fetch_page to read the full article.
+When you have enough information, submit your analysis using the submit_analysis tool.`,
     },
   ];
 
@@ -107,7 +108,9 @@ If a search result looks like a detailed analysis but the snippet is too short, 
         ],
         tools,
         tool_choice:
-          turn === 0 ? { type: "tool", name: "web_search" } : { type: "auto" },
+          turn === 0
+            ? { type: "tool", name: "web_search" }
+            : { type: "auto" },
         messages,
       });
 
@@ -117,30 +120,18 @@ If a search result looks like a detailed analysis but the snippet is too short, 
 
       const response = await stream.finalMessage();
 
-      if (response.stop_reason === "end_turn") {
-        const text = response.content
-          .filter((b) => b.type === "text")
-          .map((b) => (b as Anthropic.TextBlock).text)
-          .join("")
-          .trim()
-          .replace(/```json|```/g, "")
-          .trim();
-
-        try {
-          return JSON.parse(text) as AnalysisFindings;
-        } catch (e) {
-          const error = createError(
-            "PARSE_FAILED",
-            "searchSpoke",
-            "Failed to parse analysis JSON",
-            { cause: e, turn },
-          );
-          console.error(formatError(error));
-          return emptyAnalysis();
-        }
-      }
-
       if (response.stop_reason === "tool_use") {
+        const toolBlocks = response.content.filter(
+          (b) => b.type === "tool_use"
+        ) as Anthropic.ToolUseBlock[];
+
+        // Check if Claude submitted analysis
+        const submitBlock = toolBlocks.find((b) => b.name === "submit_analysis");
+        if (submitBlock) {
+          return submitBlock.input as AnalysisFindings;
+        }
+
+        // Handle web_search and fetch_page tool calls
         messages.push({ role: "assistant", content: response.content });
         const toolResults: Anthropic.ToolResultBlockParam[] = [];
 
@@ -176,7 +167,7 @@ If a search result looks like a detailed analysis but the snippet is too short, 
         "API_FAILED",
         "searchSpoke",
         "API call failed in analyze spoke",
-        { cause: e, turn },
+        { cause: e, turn }
       );
       console.error(formatError(error));
       return emptyAnalysis();
@@ -186,7 +177,7 @@ If a search result looks like a detailed analysis but the snippet is too short, 
   const error = createError(
     "MAX_TURNS_REACHED",
     "searchSpoke",
-    `Analyze spoke reached max turns (${MAX_TURNS})`,
+    `Analyze spoke reached max turns (${MAX_TURNS})`
   );
   console.warn(formatError(error));
   return emptyAnalysis();

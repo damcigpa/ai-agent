@@ -15,12 +15,29 @@ export interface Explanation {
   furtherReading: string[];
 }
 
+const tools: Anthropic.Tool[] = [
+  {
+    name: "submit_explanation",
+    description: "Submit the final explanation as structured data",
+    input_schema: {
+      type: "object",
+      properties: {
+        summary: { type: "string", description: "A clear direct answer to the question" },
+        keyPoints: { type: "array", items: { type: "string" }, description: "Key points of the explanation" },
+        significance: { type: "string", description: "Why this matters historically or literarily" },
+        furtherReading: { type: "array", items: { type: "string" }, description: "Topics for further reading" },
+      },
+      required: ["summary", "keyPoints", "significance", "furtherReading"],
+    },
+  },
+];
+
 export async function explainSpoke(
   findings: ResearchFindings,
   userQuestion: string,
   onEvent: (event: StreamEvent) => void,
   analysisMode: boolean = false,
-  model: string = "claude-haiku-4-5-20251001",
+  model: string = "claude-haiku-4-5-20251001"
 ): Promise<Explanation> {
   const analysisInstructions = analysisMode
     ? `Provide a DEEP literary analysis including:
@@ -42,15 +59,7 @@ Question: "${userQuestion}"
 Research findings:
 ${JSON.stringify(findings, null, 2)}
 
-${analysisInstructions}
-
-Respond ONLY with a JSON object matching this exact shape, no explanation, no markdown:
-{
-  "summary": "a clear direct answer to the question",
-  "keyPoints": ["point1", "point2", "point3"],
-  "significance": "why this matters historically or literarily",
-  "furtherReading": ["topic1", "topic2"]
-}`,
+${analysisInstructions}`,
     },
   ];
 
@@ -66,6 +75,8 @@ Respond ONLY with a JSON object matching this exact shape, no explanation, no ma
             cache_control: { type: "ephemeral" },
           },
         ],
+        tools,
+        tool_choice: { type: "tool", name: "submit_explanation" },
         messages,
       });
 
@@ -76,35 +87,16 @@ Respond ONLY with a JSON object matching this exact shape, no explanation, no ma
 
       const response = await stream.finalMessage();
 
-      if (response.stop_reason === "end_turn") {
-        const text = response.content
-          .filter((b) => b.type === "text")
-          .map((b) => (b as Anthropic.TextBlock).text)
-          .join("")
-          .trim()
-          .replace(/```json|```/g, "")
-          .trim();
+      if (response.stop_reason === "tool_use") {
+        const toolUse = response.content.find(
+          (b) => b.type === "tool_use"
+        ) as Anthropic.ToolUseBlock | undefined;
 
-        try {
-          const explanation = JSON.parse(text) as Explanation;
+        if (toolUse) {
+          const explanation = toolUse.input as Explanation;
           onEvent({ type: "chunk", data: explanation.summary });
           onEvent({ type: "done", data: explanation.summary });
           return explanation;
-        } catch (e) {
-          const error = createError(
-            "PARSE_FAILED",
-            "searchSpoke",
-            "Failed to parse explanation JSON",
-            { cause: e, turn },
-          );
-          console.error(formatError(error));
-          onEvent({ type: "error", data: "Failed to parse explanation" });
-          return {
-            summary: findings.context || "No explanation available",
-            keyPoints: findings.keyFacts ?? [],
-            significance: "",
-            furtherReading: [],
-          };
         }
       }
     } catch (e) {
@@ -112,7 +104,7 @@ Respond ONLY with a JSON object matching this exact shape, no explanation, no ma
         "API_FAILED",
         "searchSpoke",
         "API call failed in explain spoke",
-        { cause: e, turn },
+        { cause: e, turn }
       );
       console.error(formatError(error));
       onEvent({ type: "error", data: (e as Error).message });
@@ -122,7 +114,7 @@ Respond ONLY with a JSON object matching this exact shape, no explanation, no ma
   const error = createError(
     "MAX_TURNS_REACHED",
     "searchSpoke",
-    `Explain spoke reached max turns (${MAX_TURNS})`,
+    `Explain spoke reached max turns (${MAX_TURNS})`
   );
   console.warn(formatError(error));
   return {
