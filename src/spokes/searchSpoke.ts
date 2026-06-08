@@ -19,6 +19,17 @@ const LITERATURE_SUBJECTS: LiteratureSubject[] = [
   "hungarian_literature",
 ];
 
+function getToolChoice(
+  turn: number,
+  isLastTurn: boolean,
+  correctionTurn: boolean,
+): Anthropic.ToolChoice {
+  if (correctionTurn) return { type: "tool", name: "submit_findings" };
+  if (isLastTurn) return { type: "none" };
+  if (turn === 0) return { type: "tool", name: "web_search" };
+  return { type: "auto" };
+}
+
 const tools: Anthropic.Tool[] = [
   {
     name: "web_search",
@@ -45,6 +56,33 @@ const tools: Anthropic.Tool[] = [
         },
       },
       required: ["url"],
+    },
+  },
+  {
+    name: "submit_findings",
+    description: "Submit the final research findings as structured JSON",
+    input_schema: {
+      type: "object",
+      properties: {
+        author: { type: "string" },
+        work: { type: "string" },
+        date: { type: "string" },
+        context: { type: "string" },
+        confidence: { type: "string", enum: ["high", "medium", "low"] },
+        sources: { type: "array", items: { type: "string" } },
+        subject: { type: "string" },
+        keyFacts: { type: "array", items: { type: "string" } },
+      },
+      required: [
+        "author",
+        "work",
+        "date",
+        "context",
+        "confidence",
+        "sources",
+        "subject",
+        "keyFacts",
+      ],
     },
   },
 ];
@@ -144,6 +182,7 @@ If search snippets are too short, use fetch_page on the single most promising UR
   ];
 
   let fetchCount = 0;
+  let correctionTurn = false;
 
   for (let turn = 0; turn < MAX_TURNS; turn++) {
     const isLastTurn = turn === MAX_TURNS - 1;
@@ -160,21 +199,18 @@ If search snippets are too short, use fetch_page on the single most promising UR
           },
         ],
         tools,
-        tool_choice: isLastTurn
-          ? { type: "none" }
-          : turn === 0
-            ? { type: "tool", name: "web_search" }
-            : { type: "auto" },
-        messages: isLastTurn
-          ? [
-              ...messages,
-              {
-                role: "user" as const,
-                content:
-                  "⚠️  IMPORTANT: You MUST respond with valid JSON now. No more tool calls. Use what you have found so far.",
-              },
-            ]
-          : messages,
+        tool_choice: getToolChoice(turn, isLastTurn, correctionTurn),
+        messages:
+          isLastTurn && !correctionTurn
+            ? [
+                ...messages,
+                {
+                  role: "user" as const,
+                  content:
+                    "⚠️  IMPORTANT: You MUST respond with valid JSON now. No more tool calls. Use what you have found so far.",
+                },
+              ]
+            : messages,
       });
 
       stream.on("message", (msg) => {
@@ -203,6 +239,16 @@ If search snippets are too short, use fetch_page on the single most promising UR
               { turn },
             );
             console.error(formatError(error));
+
+            if (!isLastTurn) {
+              messages.push({ role: "assistant", content: response.content });
+              messages.push({
+                role: "user",
+                content: "Submit your findings using the submit_findings tool.",
+              });
+              correctionTurn = true;
+              continue;
+            }
             return emptyFindings(subject);
           }
 
@@ -229,6 +275,16 @@ If search snippets are too short, use fetch_page on the single most promising UR
             { cause: e, turn },
           );
           console.error(formatError(error));
+
+          if (!isLastTurn) {
+            messages.push({ role: "assistant", content: response.content });
+            messages.push({
+              role: "user",
+              content: "Submit your findings using the submit_findings tool.",
+            });
+            correctionTurn = true;
+            continue;
+          }
           return emptyFindings(subject);
         }
       }
@@ -239,6 +295,16 @@ If search snippets are too short, use fetch_page on the single most promising UR
         const toolBlocks = response.content.filter(
           (b) => b.type === "tool_use",
         ) as Anthropic.ToolUseBlock[];
+
+        // Handle submit_findings tool use
+        const submitBlock = toolBlocks.find(
+          (b) => b.name === "submit_findings",
+        );
+        if (submitBlock) {
+          const findings = submitBlock.input as ResearchFindings;
+          correctionTurn = false;
+          return await routeByConfidence(findings);
+        }
 
         const searches = toolBlocks
           .filter((b) => b.name === "web_search")

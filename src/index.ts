@@ -8,7 +8,9 @@ async function main() {
     output: process.stdout,
   });
 
-  console.log("Chat with Claude (type 'exit' to quit)\n");
+  console.log("Chat with Claude (type 'exit' to quit)");
+  console.log("Model commands: 'use sonnet' | 'use haiku' (default: haiku)");
+  console.log("Quiz: type /quiz after researching a topic\n");
 
   const askQuestion = () => {
     rl.question("You: ", async (input) => {
@@ -18,7 +20,14 @@ async function main() {
         rl.close();
         return;
       }
-      if (trimmed) await chat(trimmed);
+      if (trimmed) {
+        const response = await chat(trimmed);
+        // streaming responses print themselves via process.stdout.write
+        // non-streaming responses (quiz, model switch) need to be printed here
+        if (response && !response.includes("\n📚 Subject:")) {
+          console.log(`\n${response}\n`);
+        }
+      }
       askQuestion();
     });
   };
