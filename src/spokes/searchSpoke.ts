@@ -25,7 +25,7 @@ function getToolChoice(
   correctionTurn: boolean,
 ): Anthropic.ToolChoice {
   if (correctionTurn) return { type: "tool", name: "submit_findings" };
-  if (isLastTurn) return { type: "none" };
+  if (isLastTurn) return { type: "tool", name: "submit_findings" };
   if (turn === 0) return { type: "tool", name: "web_search" };
   return { type: "auto" };
 }
@@ -126,8 +126,6 @@ function validateFindings(findings: ResearchFindings): string | null {
     return null;
   }
 
-  // only escalate if there is no useful information at all
-  // terminology questions won't have author or work but will have context
   if (!findings.author && !findings.work && !findings.context) {
     return "no useful information found for literature question";
   }
@@ -156,24 +154,33 @@ async function routeByConfidence(
   }
 }
 
+async function processFindings(
+  findings: ResearchFindings,
+  subject: Subject,
+): Promise<ResearchFindings> {
+  // override model's self-reported subject with the known authoritative subject
+  findings.subject = subject;
+
+  const missingRequired = validateFindings(findings);
+  if (missingRequired) {
+    console.log(
+      `  ⚠️  Missing required fields: ${missingRequired} — escalating`,
+    );
+    return {
+      ...findings,
+      escalate: true,
+      escalateReason: `Missing required fields: ${missingRequired}`,
+    };
+  }
+  return await routeByConfidence(findings);
+}
+
 export async function searchSpoke(
   task: string,
   subject: Subject = "general",
   model: string = "claude-haiku-4-5-20251001",
 ): Promise<ResearchFindings> {
   const baseContent = `${task}
-
-You must respond ONLY with a JSON object matching this exact shape, no explanation, no markdown:
-{
-  "author": "name of the author or relevant figure, or empty string if unknown",
-  "work": "title of the work, law, event or topic, or empty string if unknown",
-  "date": "date or period or empty string if unknown",
-  "context": "detailed explanation of the topic",
-  "confidence": "high" | "medium" | "low",
-  "sources": ["url1", "url2"],
-  "subject": "${subject}",
-  "keyFacts": ["fact1", "fact2", "fact3"]
-}
 
 If search snippets are too short, use fetch_page on the single most promising URL only before responding.`;
 
@@ -190,7 +197,7 @@ If search snippets are too short, use fetch_page on the single most promising UR
     try {
       const stream = client.messages.stream({
         model,
-        max_tokens: 1024,
+        max_tokens: 2048,
         system: [
           {
             type: "text",
@@ -200,17 +207,7 @@ If search snippets are too short, use fetch_page on the single most promising UR
         ],
         tools,
         tool_choice: getToolChoice(turn, isLastTurn, correctionTurn),
-        messages:
-          isLastTurn && !correctionTurn
-            ? [
-                ...messages,
-                {
-                  role: "user" as const,
-                  content:
-                    "⚠️  IMPORTANT: You MUST respond with valid JSON now. No more tool calls. Use what you have found so far.",
-                },
-              ]
-            : messages,
+        messages,
       });
 
       stream.on("message", (msg) => {
@@ -224,8 +221,6 @@ If search snippets are too short, use fetch_page on the single most promising UR
           .filter((b) => b.type === "text")
           .map((b) => (b as Anthropic.TextBlock).text)
           .join("")
-          .trim()
-          .replace(/```json|```/g, "")
           .trim();
 
         try {
@@ -253,20 +248,7 @@ If search snippets are too short, use fetch_page on the single most promising UR
           }
 
           const findings = parsed as ResearchFindings;
-
-          const missingRequired = validateFindings(findings);
-          if (missingRequired) {
-            console.log(
-              `  ⚠️  Missing required fields: ${missingRequired} — escalating`,
-            );
-            return {
-              ...findings,
-              escalate: true,
-              escalateReason: `Missing required fields: ${missingRequired}`,
-            };
-          }
-
-          return await routeByConfidence(findings);
+          return await processFindings(findings, subject);
         } catch (e) {
           const error = createError(
             "PARSE_FAILED",
@@ -303,7 +285,7 @@ If search snippets are too short, use fetch_page on the single most promising UR
         if (submitBlock) {
           const findings = submitBlock.input as ResearchFindings;
           correctionTurn = false;
-          return await routeByConfidence(findings);
+          return await processFindings(findings, subject);
         }
 
         const searches = toolBlocks

@@ -8,6 +8,34 @@ import { trackUsage } from "../tokenTracker.js";
 
 const MAX_TURNS = 5;
 
+export interface AnalysisFindings {
+  title: string;
+  author: string;
+  period: string;
+  synopsis: string;
+  themes: string[];
+  literaryDevices: string[];
+  criticalPerspectives: string[];
+  significance: string;
+  confidence: "high" | "medium" | "low";
+  sources: string[];
+}
+
+export function emptyAnalysis(): AnalysisFindings {
+  return {
+    title: "",
+    author: "",
+    period: "",
+    synopsis: "",
+    themes: [],
+    literaryDevices: [],
+    criticalPerspectives: [],
+    significance: "",
+    confidence: "low",
+    sources: [],
+  };
+}
+
 const tools: Anthropic.Tool[] = [
   {
     name: "web_search",
@@ -55,35 +83,10 @@ const tools: Anthropic.Tool[] = [
   },
 ];
 
-export interface AnalysisFindings {
-  title: string;
-  author: string;
-  period: string;
-  synopsis: string;
-  themes: string[];
-  literaryDevices: string[];
-  criticalPerspectives: string[];
-  significance: string;
-  confidence: "high" | "medium" | "low";
-  sources: string[];
-}
-
-export function emptyAnalysis(): AnalysisFindings {
-  return {
-    title: "",
-    author: "",
-    period: "",
-    synopsis: "",
-    themes: [],
-    literaryDevices: [],
-    criticalPerspectives: [],
-    significance: "",
-    confidence: "low",
-    sources: [],
-  };
-}
-
-export async function analyzeSpoke(task: string, model: string = "claude-haiku-4-5-20251001"): Promise<AnalysisFindings> {
+export async function analyzeSpoke(
+  task: string,
+  model: string = "claude-haiku-4-5-20251001"
+): Promise<AnalysisFindings> {
   const messages: Anthropic.MessageParam[] = [
     {
       role: "user",
@@ -93,6 +96,8 @@ If a search result looks like a detailed analysis but the snippet is too short, 
 When you have enough information, submit your analysis using the submit_analysis tool.`,
     },
   ];
+
+  let correctionTurn = false;
 
   for (let turn = 0; turn < MAX_TURNS; turn++) {
     try {
@@ -107,10 +112,11 @@ When you have enough information, submit your analysis using the submit_analysis
           },
         ],
         tools,
-        tool_choice:
-          turn === 0
-            ? { type: "tool", name: "web_search" }
-            : { type: "auto" },
+        tool_choice: correctionTurn
+          ? { type: "tool", name: "submit_analysis" }
+          : turn === 0
+          ? { type: "tool", name: "web_search" }
+          : { type: "auto" },
         messages,
       });
 
@@ -120,6 +126,17 @@ When you have enough information, submit your analysis using the submit_analysis
 
       const response = await stream.finalMessage();
 
+      if (response.stop_reason === "end_turn" || response.stop_reason === "max_tokens") {
+        // Claude responded with text instead of calling submit_analysis
+        messages.push({ role: "assistant", content: response.content });
+        messages.push({
+          role: "user" as const,
+          content: "Submit your analysis using the submit_analysis tool.",
+        });
+        correctionTurn = true;
+        continue;
+      }
+
       if (response.stop_reason === "tool_use") {
         const toolBlocks = response.content.filter(
           (b) => b.type === "tool_use"
@@ -128,6 +145,7 @@ When you have enough information, submit your analysis using the submit_analysis
         // Check if Claude submitted analysis
         const submitBlock = toolBlocks.find((b) => b.name === "submit_analysis");
         if (submitBlock) {
+          correctionTurn = false;
           return submitBlock.input as AnalysisFindings;
         }
 
