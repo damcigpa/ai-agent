@@ -21,17 +21,11 @@ function getChatRateLimiter(): Promise<RateLimiterDynamo> {
       const rateLimiter = new RateLimiterDynamo(
         {
           storeClient: dynamoClient,
-          keyPrefix: "chat-rate-limit", // also used as this limiter's own table name
+          keyPrefix: "chat-rate-limit",
           points: 5, // 5 requests...
           duration: 60, // ...per 60 seconds
-          blockDuration: 30, // if exceeded, block ALL further requests for 30s,
-          // rather than just waiting for the window to reset —
-          // a real deterrent against rapid retry loops
-          ttlSet: true, // skip the DescribeTimeToLive check on init — that
-          // check races with the table's own CreateTable call
-          // (table starts in "CREATING" state, not immediately
-          // describable), causing a ValidationException on first
-          // request after a fresh table is auto-created
+          blockDuration: 30,
+          ttlSet: true,
         },
         (err) => {
           if (err) reject(err);
@@ -68,52 +62,6 @@ export async function checkChatRateLimit(userId: string): Promise<RateLimitResul
     // when the limit is exceeded — the rejection value is itself a
     // RateLimiterRes object, carrying msBeforeNext for a Retry-After header
     const msBeforeNext = (rejection as { msBeforeNext?: number })?.msBeforeNext ?? 60000;
-    return { allowed: false, msBeforeNext };
-  }
-}
-
-// --- A SEPARATE limiter instance for signup, keyed by IP (not userId,
-// since no user exists yet at this point). Deliberately its own
-// RateLimiterDynamo — a different keyPrefix means a DIFFERENT DynamoDB
-// table, with its OWN, stricter points/duration, independent of chat's
-// limiter entirely. ---
-
-let signupLimiterPromise: Promise<RateLimiterDynamo> | null = null;
-
-function getSignupRateLimiter(): Promise<RateLimiterDynamo> {
-  if (!signupLimiterPromise) {
-    signupLimiterPromise = new Promise((resolve, reject) => {
-      const rateLimiter = new RateLimiterDynamo(
-        {
-          storeClient: dynamoClient,
-          keyPrefix: "signup-rate-limit",
-          points: 3, // signup is a higher-value abuse target than chat —
-          duration: 3600, // deliberately much stricter: 3 attempts per HOUR, not per minute
-          blockDuration: 3600, // and a full hour block once exceeded
-          ttlSet: true,
-        },
-        (err) => {
-          if (err) reject(err);
-          else resolve(rateLimiter);
-        }
-      );
-    });
-
-    signupLimiterPromise.catch(() => {
-      signupLimiterPromise = null;
-    });
-  }
-  return signupLimiterPromise;
-}
-
-export async function checkSignupRateLimit(ip: string): Promise<RateLimitResult> {
-  const limiter = await getSignupRateLimiter();
-
-  try {
-    const res = await limiter.consume(ip, 1);
-    return { allowed: true, msBeforeNext: res.msBeforeNext };
-  } catch (rejection) {
-    const msBeforeNext = (rejection as { msBeforeNext?: number })?.msBeforeNext ?? 3600000;
     return { allowed: false, msBeforeNext };
   }
 }

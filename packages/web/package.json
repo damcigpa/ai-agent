@@ -9,12 +9,16 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@apollo/client": "^4.2.8",
     "@aws-sdk/client-dynamodb": "^3.1094.0",
     "@aws-sdk/lib-dynamodb": "^3.1094.0",
     "@exam-prep/agent": "file:../agent",
     "bcryptjs": "^3.0.3",
+    "graphql": "^16.14.2",
+    "graphql-yoga": "^5.21.2",
     "next": "16.2.10",
     "next-auth": "^5.0.0-beta.32",
+    "rate-limiter-flexible": "^11.2.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "zod": "^4.4.3"

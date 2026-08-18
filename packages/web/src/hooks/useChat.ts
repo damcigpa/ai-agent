@@ -1,17 +1,100 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
+import { gql } from "@apollo/client";
 import { Message, StreamEvent } from "../types/chat";
 import { useModel } from "./useModel";
+import { useSessionId } from "./useSessionId";
+import { apolloClient } from "../lib/apolloClient";
 
 const SSE_DATA_PREFIX = "data: ";
+
+const GET_CHAT_HISTORY_BY_SESSION = gql`
+  query GetChatHistoryBySession($sessionId: String!) {
+    chatHistoryBySession(sessionId: $sessionId) {
+      question
+      answer
+    }
+  }
+`;
+
+interface SessionHistoryItem {
+  question: string;
+  answer: string;
+}
 
 export function useChat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [progress, setProgress] = useState<string>("");
   const { model } = useModel(); // shared with <ModelSelector /> via ModelProvider
+  const { sessionId, startNewSession } = useSessionId();
   const abortController = useRef<AbortController | null>(null);
+
+  // Runs once sessionId becomes available (it starts null — see useSessionId's
+  // own comment on why). Restores a CONTINUING session's messages, or does
+  // nothing for a genuinely fresh one (the query just returns an empty array).
+  // This is what actually fixes "refresh wipes the chat".
+  useEffect(() => {
+    if (!sessionId) return;
+
+    apolloClient
+      .query<{ chatHistoryBySession: SessionHistoryItem[] }>({
+        query: GET_CHAT_HISTORY_BY_SESSION,
+        variables: { sessionId },
+        fetchPolicy: "network-only", // always get the current, real state on
+        // load — NOT Apollo's cache, which
+        // wouldn't have this data yet anyway
+      })
+      .then((res) => {
+        if (!res.data) return;
+
+        const restored: Message[] = res.data.chatHistoryBySession.flatMap(
+          (item) => [
+            { role: "user" as const, content: item.question },
+            { role: "assistant" as const, content: item.answer },
+          ]
+        );
+        if (restored.length > 0) {
+          setMessages(restored);
+        }
+      })
+      .catch((e) => {
+        console.error("[useChat] failed to restore session history:", e);
+      });
+    // deliberately only re-runs when sessionId itself changes (e.g., a
+    // future "New Chat" click) — not on every render
+  }, [sessionId]);
+
+  async function restoreSessionHistory(
+    sessionId: string
+  ): Promise<Message[] | null> {
+    try {
+      const res = await apolloClient.query<{ chatHistoryBySession: SessionHistoryItem[] }>({
+        query: GET_CHAT_HISTORY_BY_SESSION,
+        variables: { sessionId },
+        fetchPolicy: "network-only",
+      });
+
+      if (!res.data) return null;
+
+      return res.data.chatHistoryBySession.flatMap((item) => [
+        { role: "user" as const, content: item.question },
+        { role: "assistant" as const, content: item.answer },
+      ]);
+    } catch (e) {
+      console.error("[useChat] failed to restore session history:", e);
+      return null;
+    }
+  }
+
+  useEffect(() => {
+    if (!sessionId) return;
+
+    restoreSessionHistory(sessionId).then((restored) => {
+      if (restored && restored.length > 0) setMessages(restored);
+    });
+  }, [sessionId]);
 
   const appendToLastMessage = (text: string) => {
     setMessages((prev) => {
@@ -94,7 +177,7 @@ export function useChat() {
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: input, model }),
+        body: JSON.stringify({ message: input, model, sessionId }),
         signal: abortController.current.signal,
       });
 
@@ -141,11 +224,20 @@ export function useChat() {
     abortController.current?.abort();
   };
 
+  // Clears the visible conversation and starts a genuinely fresh session —
+  // ready for the (still deferred) "New Chat" button UI to call.
+  const newChat = () => {
+    startNewSession();
+    setMessages([]);
+  };
+
   return {
     messages,
     isLoading,
     progress,
     sendMessage,
     cancel,
+    newChat,
+    sessionId,
   };
 }

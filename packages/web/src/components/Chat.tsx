@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useChat as useChatHook } from "../hooks/useChat";
 import { Message, MessageStructure } from "../types/chat";
+import { QuizPanel } from "./QuizPanel";
 
 // --- Parts ---
 
@@ -11,7 +12,7 @@ function ChatStructure({ structure }: { structure?: MessageStructure }) {
 
   return (
     <div className="mt-3 space-y-2 text-sm border-t pt-3">
-      {structure.keyPoints.length > 0 && (
+      {(structure.keyPoints?.length ?? 0) > 0 && (
         <div>
           <p className="font-medium text-gray-700 mb-1">Key Points</p>
           <ul className="list-disc list-inside space-y-1 text-gray-600">
@@ -27,7 +28,7 @@ function ChatStructure({ structure }: { structure?: MessageStructure }) {
           <p>{structure.significance}</p>
         </div>
       )}
-      {structure.furtherReading.length > 0 && (
+      {(structure.furtherReading?.length ?? 0) > 0 && (
         <div>
           <p className="font-medium text-gray-700 mb-1">Further Reading</p>
           <ul className="list-disc list-inside space-y-1 text-gray-500">
@@ -150,14 +151,23 @@ function Input({
 // --- Public export ---
 // ChatApp is now the messages+input body ONLY. It does NOT render <AppHeader />.
 // page.tsx renders <AppHeader /> and <ChatApp /> as siblings, both standalone.
+//
+// NOTE: this assumes useChatHook() returns a `sessionId` field. If it
+// doesn't yet, useChat.ts needs that added — sessionId is generated
+// client-side (via useEffect, since sessionStorage isn't available during
+// SSR), so it's undefined/null for a brief moment on first mount. The
+// `sessionId &&` guard below prevents QuizPanel from calling
+// /api/quiz/start with an undefined session in that window.
 
 export function ChatApp() {
-  const { messages, isLoading, progress, sendMessage, cancel } = useChatHook();
+  const { messages, isLoading, progress, sendMessage, cancel, sessionId } =
+    useChatHook();
 
   return (
     <>
       <Messages messages={messages} progress={progress} />
       <Input isLoading={isLoading} sendMessage={sendMessage} cancel={cancel} />
+      {sessionId && <QuizPanel sessionId={sessionId} />}
     </>
   );
 }
