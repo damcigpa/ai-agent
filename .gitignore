@@ -3,3 +3,4 @@ node_modules/
 dist/
 scratchpad.json
 .env.local
+.DS_Store
