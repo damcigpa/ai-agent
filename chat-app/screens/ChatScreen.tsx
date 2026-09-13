@@ -1,5 +1,5 @@
-import { useEffect, useLayoutEffect } from 'react';
-import { KeyboardAvoidingView, Platform } from 'react-native';
+import { useState, useEffect, useLayoutEffect } from 'react';
+import { KeyboardAvoidingView, Platform, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, NavigationProp } from '@react-navigation/native';
 import { useSelector, useDispatch } from 'react-redux';
@@ -8,18 +8,17 @@ import { MessageList } from '../components/MessageList';
 import { InputBar } from '../components/InputBar';
 import { HistoryButton } from '../components/HistoryButton';
 import { QuizButton } from '../components/QuizButton';
+import { NewChatButton } from '../components/NewChatButton';
 import { HistoryModal } from '../components/HistoryModal';
+import { ThinkingIndicator } from '../components/ThinkingIndicator';
 import { RootStackParamList } from '../navigation/RootNavigator';
 import { ChatSession } from '../types/chat';
 import { RootState, AppDispatch } from '../store/store';
-import { View } from 'react-native';
-import { newChatStarted } from '../store/chatSlice';
-import { NewChatButton } from '../components/NewChatButton';
 import {
   messageAdded, messagesSet, historyVisibleSet, sessionIdSet,
-  fetchSessions, restoreLastSession, persistCurrentSession,
+  fetchSessions, restoreLastSession, persistCurrentSession, newChatStarted, deleteSession
 } from '../store/chatSlice';
-import { sendMessage } from '../lib/api';
+import { streamMessage } from '../lib/api';
 
 export function ChatScreen() {
   const insets = useSafeAreaInsets();
@@ -31,17 +30,20 @@ export function ChatScreen() {
   const historyVisible = useSelector((state: RootState) => state.chat.historyVisible);
   const sessionId = useSelector((state: RootState) => state.chat.sessionId);
 
+  const [isThinking, setIsThinking] = useState(false);
+  const [thinkingText, setThinkingText] = useState('Thinking…');
+
   useLayoutEffect(() => {
     navigation.setOptions({
       headerLeft: () => (
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-        <HistoryButton
-        onPress={() => {
-          dispatch(fetchSessions());
-          dispatch(historyVisibleSet(true));
-        }}
-        />
-        <NewChatButton onPress={() => dispatch(newChatStarted())} />
+          <HistoryButton
+            onPress={() => {
+              dispatch(fetchSessions());
+              dispatch(historyVisibleSet(true));
+            }}
+          />
+          <NewChatButton onPress={() => dispatch(newChatStarted())} />
         </View>
       ),
       headerRight: () => (
@@ -64,19 +66,30 @@ export function ChatScreen() {
     }));
   }, [messages]);
 
-  async function handleSend(text: string) {
+  function handleSend(text: string) {
     dispatch(messageAdded({ id: Date.now().toString(), role: 'user', text }));
+    setIsThinking(true);
+    setThinkingText('Thinking…');
 
-    try {
-      const reply = await sendMessage(text);
-      dispatch(messageAdded({ id: Date.now().toString(), role: 'assistant', text: reply }));
-    } catch (e) {
-      dispatch(messageAdded({
-        id: Date.now().toString(),
-        role: 'assistant',
-        text: 'Sorry, something went wrong reaching the server.',
-      }));
-    }
+    streamMessage(
+      text,
+      (event) => {
+        if (event.type === 'progress') {
+          setThinkingText(event.data);
+        }
+        if (event.type === 'done') {
+          dispatch(messageAdded({ id: Date.now().toString(), role: 'assistant', text: event.data }));
+        }
+        if (event.type === 'error') {
+          dispatch(messageAdded({ id: Date.now().toString(), role: 'assistant', text: 'Hiba történt.' }));
+        }
+      },
+      () => setIsThinking(false),
+      () => {
+        dispatch(messageAdded({ id: Date.now().toString(), role: 'assistant', text: 'Kapcsolódási hiba.' }));
+        setIsThinking(false);
+      }
+    );
   }
 
   function handleSelectSession(session: ChatSession) {
@@ -95,6 +108,7 @@ export function ChatScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <MessageList messages={messages} />
+        {isThinking && <ThinkingIndicator text={thinkingText} />}
         <InputBar onSend={handleSend} />
       </KeyboardAvoidingView>
 
@@ -102,6 +116,7 @@ export function ChatScreen() {
         visible={historyVisible}
         onClose={() => dispatch(historyVisibleSet(false))}
         onSelectSession={handleSelectSession}
+        onDeleteSession={(session) => dispatch(deleteSession(session.id))}
         sessions={sessions}
       />
     </Screen>
