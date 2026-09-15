@@ -33,6 +33,7 @@ export default defineConfig({
             "src/graphql/**/*.test.{ts,tsx}",
             "src/lib/**/*.test.{ts,tsx}",
           ],
+          exclude: ["**/*.integration.test.ts"],
         },
       },
     ],

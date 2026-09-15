@@ -7,6 +7,7 @@ const client = new DynamoDBClient({
     accessKeyId: process.env.AWS_ACCESS_KEY_ID ?? "",
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY ?? "",
   },
+   endpoint: process.env.DYNAMODB_ENDPOINT,
 });
 
 // DocumentClient gives you plain JS objects instead of raw DynamoDB AttributeValue format

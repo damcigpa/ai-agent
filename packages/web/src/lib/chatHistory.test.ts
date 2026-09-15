@@ -35,8 +35,6 @@ describe("saveChatHistory", () => {
     });
 
     it("writes a PutCommand with the correct table and item shape", async () => {
-        mockSend.mockResolvedValue({});
-
         const result = await saveChatHistory("user-1", "session-1", "q", "a");
 
         const command = mockSend.mock.calls[0][0] as PutCommand;
@@ -114,8 +112,6 @@ describe("getChatHistoryBySession", () => {
 
 describe("deleteChatHistoryItem", () => {
     it("deletes using exactly the composite key (userId + createdAt)", async () => {
-        mockSend.mockResolvedValue({});
-
         await deleteChatHistoryItem("user-1", "t1");
 
         const command = mockSend.mock.calls[0][0] as DeleteCommand;
