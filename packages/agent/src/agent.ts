@@ -6,6 +6,7 @@ import { StreamEvent } from "./progress.js";
 import { sanitizeInput } from "./security.js";
 import { quizSpoke, Quiz, QuizQuestion } from "./spokes/quizSpoke.js";
 import { readScratchpad } from "./tools/scratchpad.js";
+import { classifyInput } from "./classifyInput.js";
 
 export const MODEL_HAIKU = "claude-haiku-4-5-20251001";
 export const MODEL_SONNET = "claude-sonnet-4-6";
@@ -159,12 +160,23 @@ export async function chat(userMessage: string): Promise<string> {
     return `How many questions would you like? (1-10, default: 5)`;
   }
 
-  const sanitized = sanitizeInput(userMessage);
-  if (!sanitized) {
-    return "I'm sorry, I cannot process that request.";
-  }
+    const sanitized = sanitizeInput(userMessage);
+    if (!sanitized) {
+      return "I'm sorry, I cannot process that request.";
+    }
 
-  messages.push({ role: "user", content: sanitized });
+    const classification = await classifyInput(sanitized, MODEL_HAIKU);
+
+    if (classification.verdict === "suspicious") {
+      return "I'm sorry, I cannot process that request.";
+    }
+
+    if (!classification.onTopic) {
+      return "Ez a kérdés nem történelem vagy irodalom témájú — kérlek tegyél fel ilyen tárgyú kérdést.";
+    }
+
+messages.push({ role: "user", content: sanitized });
+
 
   try {
     const stream = hub(applyCache(messages), currentModel);

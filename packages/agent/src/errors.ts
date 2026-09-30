@@ -16,7 +16,7 @@ export type ErrorCode =
 
 // --- Spoke names ---
 
-export type Spoke = "hub" | "searchSpoke" | "fileSpoke" | "webSearch" | "agent";
+export type Spoke = "hub" | "searchSpoke" | "fileSpoke" | "webSearch" | "agent" | "classifier";
 
 // --- Error shape ---
 

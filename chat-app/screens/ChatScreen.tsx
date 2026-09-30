@@ -19,6 +19,8 @@ import {
   fetchSessions, restoreLastSession, persistCurrentSession, newChatStarted, deleteSession
 } from '../store/chatSlice';
 import { streamMessage } from '../lib/api';
+import { LogoutButton } from '../components/LogoutButton';
+import { logout } from '../lib/auth';
 
 export function ChatScreen() {
   const insets = useSafeAreaInsets();
@@ -47,7 +49,15 @@ export function ChatScreen() {
         </View>
       ),
       headerRight: () => (
-        <QuizButton onPress={() => navigation.navigate('Quiz', { topic: 'Roman History' })} />
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <QuizButton onPress={() => navigation.navigate('Quiz', { topic: 'Roman History' })} />
+            <LogoutButton
+              onPress={async () => {
+                await logout();
+                navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+              }}
+            />
+          </View>
       ),
     });
   }, [navigation]);
