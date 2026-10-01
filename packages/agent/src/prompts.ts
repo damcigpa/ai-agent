@@ -71,4 +71,13 @@ Given a user's message, decide two independent things:
 2. onTopic: true only if the message is genuinely about history, literature, or a closely related humanities topic (Hungarian history/literature included). false for anything else — math, coding, general chit-chat, other school subjects, personal advice, etc. — even if it's a perfectly reasonable question, it's simply out of scope for this assistant.
 
 Always give a short, one-sentence reason.`,
+
+  material: `${BASE}
+
+You are extracting structured research findings from material the STUDENT THEMSELVES provided (a photo of a textbook page, a notebook page, or pasted text) — not from a live web search.
+Rules:
+- Base everything strictly on what is actually present in the material — never add outside facts
+- If the material is hard to read (blurry photo, messy handwriting) or incomplete, say so and lower your confidence accordingly rather than guessing
+- Decide the subject: history, literature, hungarian_history, hungarian_literature, or general
+- Always respond by calling submit_findings — never plain text`,
 };

@@ -5,9 +5,10 @@ import { getUsageWarning } from "./tokenTracker.js";
 import { StreamEvent } from "./progress.js";
 import { sanitizeInput } from "./security.js";
 import { quizSpoke, Quiz, QuizQuestion } from "./spokes/quizSpoke.js";
-import { readScratchpad } from "./tools/scratchpad.js";
+import { readScratchpad, updateScratchpad } from "./tools/scratchpad.js";
 import { classifyInput } from "./classifyInput.js";
-
+import { readAllMaterials, clearMaterials } from "./tools/readMaterial.js";
+import { materialSpoke } from "./spokes/materialSpoke.js";
 export const MODEL_HAIKU = "claude-haiku-4-5-20251001";
 export const MODEL_SONNET = "claude-sonnet-4-6";
 
@@ -160,23 +161,54 @@ export async function chat(userMessage: string): Promise<string> {
     return `How many questions would you like? (1-10, default: 5)`;
   }
 
-    const sanitized = sanitizeInput(userMessage);
-    if (!sanitized) {
-      return "I'm sorry, I cannot process that request.";
+  // --- /import command ---
+   // --- /import command ---
+  if (userMessage.trim().toLowerCase() === "/import") {
+    const materials = readAllMaterials();
+
+    if (materials.length === 0) {
+      return "No files found in materials/. Add a .txt, .md, .jpg or .png file there first.";
     }
 
-    const classification = await classifyInput(sanitized, MODEL_HAIKU);
+    console.log(`\n📥 Extracting findings from ${materials.length} file(s)...`);
+    const findings = await materialSpoke(materials, currentModel);
 
-    if (classification.verdict === "suspicious") {
-      return "I'm sorry, I cannot process that request.";
+    clearMaterials();
+
+    if (!findings.context) {
+      return "Could not extract usable content from the provided files. Please try clearer photos or different files.";
     }
 
-    if (!classification.onTopic) {
-      return "Ez a kérdés nem történelem vagy irodalom témájú — kérlek tegyél fel ilyen tárgyú kérdést.";
-    }
+    const scratchpad = readScratchpad();
+    updateScratchpad(scratchpad, {
+      subject: findings.subject ?? "general",
+      topic: findings.work || "imported material",
+      findings: [...(scratchpad?.findings ?? []), findings],
+      conversationTopics: [
+        ...(scratchpad?.conversationTopics ?? []),
+        `imported ${materials.length} file(s)`,
+      ],
+    });
 
-messages.push({ role: "user", content: sanitized });
+    return `✅ Imported ${materials.length} file(s) (confidence: ${findings.confidence}).\n\n💡 Type /quiz to generate questions from it.`;
+  }
 
+  const sanitized = sanitizeInput(userMessage);
+  if (!sanitized) {
+    return "I'm sorry, I cannot process that request.";
+  }
+
+  const classification = await classifyInput(sanitized, MODEL_HAIKU);
+
+  if (classification.verdict === "suspicious") {
+    return "I'm sorry, I cannot process that request.";
+  }
+
+  if (!classification.onTopic) {
+    return "Ez a kérdés nem történelem vagy irodalom témájú — kérlek tegyél fel ilyen tárgyú kérdést.";
+  }
+
+  messages.push({ role: "user", content: sanitized });
 
   try {
     const stream = hub(applyCache(messages), currentModel);

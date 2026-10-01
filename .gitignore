@@ -4,3 +4,5 @@ dist/
 scratchpad.json
 .env.local
 .DS_Store
+packages/agent/materials/*
+!packages/agent/materials/.gitkeep
