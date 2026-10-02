@@ -6,3 +6,8 @@ scratchpad.json
 .DS_Store
 packages/agent/materials/*
 !packages/agent/materials/.gitkeep
+packages/agent/inbox/*
+!packages/agent/inbox/.gitkeep
+packages/agent/library/*
+!packages/agent/library/.gitkeep
+packages/agent/data/
