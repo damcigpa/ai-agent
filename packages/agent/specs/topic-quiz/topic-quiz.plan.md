@@ -1,6 +1,6 @@
 # Plan: Topic library and "quiz me on topic"
 
-Implements `spec.md` in this folder. The spec says *what*; this file says *how*.
+Implements `topic-quiz.md` in this folder. The spec says *what*; this file says *how*.
 Every decision below names the acceptance criteria (AC) it serves.
 
 ## Technology decisions

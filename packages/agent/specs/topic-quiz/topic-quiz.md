@@ -2,7 +2,7 @@
 
 > **Status:** draft, written **before** implementation (spec-first).
 > This file says *what* the feature does and *why*. *How* it is built
-> (LangChain components, vector store, embedding model) belongs in `plan.md`.
+> (LangChain components, vector store, embedding model) belongs in `topic-quiz.plan.md`.
 
 ## Purpose
 
