@@ -11,9 +11,28 @@ import { readAllMaterials, clearMaterials } from "./tools/readMaterial.js";
 import { materialSpoke } from "./spokes/materialSpoke.js";
 export const MODEL_HAIKU = "claude-haiku-4-5-20251001";
 export const MODEL_SONNET = "claude-sonnet-4-6";
+import { handleAdd, handleLibrary } from "./library/commands.js";
+import { openChunkStore, createVoyageEmbedder } from "./library/vectorStore.js";
 
 const messages: { role: string; content: string }[] = [];
 let currentModel = MODEL_HAIKU;
+
+// Lazily created, so the chat still starts without a Voyage key.
+// If opening the store fails, library search is skipped for the rest of the session.
+let chunkStore: Awaited<ReturnType<typeof openChunkStore>> | null = null;
+let libraryDisabled = false;
+
+async function searchLibraryFor(question: string) {
+  if (libraryDisabled) return [];
+  try {
+    chunkStore ??= openChunkStore(await createVoyageEmbedder());
+    return await chunkStore.search(question, 5);
+  } catch (e) {
+    console.log(`  ⚠️  Library search is off for this session: ${e instanceof Error ? e.message : "unknown error"}`);
+    libraryDisabled = true;
+    return [];
+  }
+}
 
 // --- Quiz session state ---
 interface QuizSession {
@@ -161,7 +180,6 @@ export async function chat(userMessage: string): Promise<string> {
     return `How many questions would you like? (1-10, default: 5)`;
   }
 
-  // --- /import command ---
    // --- /import command ---
   if (userMessage.trim().toLowerCase() === "/import") {
     const materials = readAllMaterials();
@@ -193,6 +211,32 @@ export async function chat(userMessage: string): Promise<string> {
     return `✅ Imported ${materials.length} file(s) (confidence: ${findings.confidence}).\n\n💡 Type /quiz to generate questions from it.`;
   }
 
+    // --- /library command ---
+  if (userMessage.trim().toLowerCase() === "/library") {
+    return handleLibrary();
+  }
+
+  // --- /add command ---
+  if (userMessage.trim().toLowerCase() === "/add") {
+    return handleAdd({
+      getStore: async () => openChunkStore(await createVoyageEmbedder()),
+      onProgress: (m) => console.log(`  · ${m}`),
+    });
+  }
+
+    // --- Library search (observation only) ---
+  // Runs before web search, prints what matched, but does not yet affect the answer.
+  // AC-12/13 will wire it into the answer in the next step.
+  const libraryHits = await searchLibraryFor(userMessage);
+  if (libraryHits.length) {
+    console.log(`\n  📒 Found ${libraryHits.length} matching chunk(s) in your library:`);
+    for (const hit of libraryHits) {
+      const preview = hit.text.length > 100 ? `${hit.text.slice(0, 100)}…` : hit.text;
+      console.log(`     [${hit.file}, chunk ${hit.chunkIndex}, distance ${hit.distance.toFixed(2)}] ${preview}`);
+    }
+    console.log("");
+  }
+
   const sanitized = sanitizeInput(userMessage);
   if (!sanitized) {
     return "I'm sorry, I cannot process that request.";
@@ -204,8 +248,12 @@ export async function chat(userMessage: string): Promise<string> {
     return "I'm sorry, I cannot process that request.";
   }
 
-  if (!classification.onTopic) {
-    return "Ez a kérdés nem történelem vagy irodalom témájú — kérlek tegyél fel ilyen tárgyú kérdést.";
+  // The student's own material is always on topic for them (library hit overrides the classifier).
+  if (!classification.onTopic && libraryHits.length === 0) {
+    return (
+      classification.offTopicMessage ??
+      "This question is outside the scope — please ask about history or literature."
+    );
   }
 
   messages.push({ role: "user", content: sanitized });
