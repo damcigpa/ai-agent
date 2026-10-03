@@ -96,17 +96,27 @@ export async function handleAdd(options: AddOptions): Promise<string> {
   return lines.join("\n");
 }
 
-// AC-8: what is in the library, and whether each file is searchable yet.
-export function handleLibrary(options: CommandOptions = {}): string {
-  const { paths = defaultPaths() } = options;
-  const files = listLibrary(paths);
+export interface LibraryEntry {
+  name: string;
+  indexed: boolean; // false = in the library, but not searchable yet
+}
 
-  if (files.length === 0) {
+// AC-8: every library file, and whether it is searchable yet. Used by /library and the web UI.
+export function getLibraryStatus(options: CommandOptions = {}): LibraryEntry[] {
+  const { paths = defaultPaths() } = options;
+  const notIndexed = new Set(pendingWork(options).toProcess);
+  return listLibrary(paths).map((name) => ({ name, indexed: !notIndexed.has(name) }));
+}
+
+// AC-8: the /library command.
+export function handleLibrary(options: CommandOptions = {}): string {
+  const entries = getLibraryStatus(options);
+
+  if (entries.length === 0) {
     return `The library is empty. Put ${SUPPORTED_HINT} files into inbox/ and run /add.`;
   }
 
-  const notIndexed = new Set(pendingWork(options).toProcess);
-  const lines = files.map((f) => (notIndexed.has(f) ? `  ⚠️  ${f} — not indexed yet (run /add)` : `  ✓ ${f}`));
+  const lines = entries.map((e) => (e.indexed ? `  ✓ ${e.name}` : `  ⚠️  ${e.name} — not indexed yet (run /add)`));
 
-  return [`📚 Library (${files.length} file(s)):`, ...lines].join("\n");
+  return [`📚 Library (${entries.length} file(s)):`, ...lines].join("\n");
 }
