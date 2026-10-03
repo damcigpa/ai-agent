@@ -3,6 +3,8 @@
 import { useState, FormEvent } from "react";
 import { signIn } from "next-auth/react";
 
+const AUTH_ENABLED = false;
+
 interface LoginFormProps {
   onSuccess?: () => void;
 }
@@ -29,6 +31,10 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
 
     onSuccess?.();
   };
+
+  if (!AUTH_ENABLED) {
+    return <p className="text-sm text-gray-600">Log in is temporarily unavailable.</p>;
+  }
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col p-6 w-80 gap-4">
@@ -61,7 +67,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
       </button>
 
       <a href="/signup" className="text-sm text-blue-500 hover:underline text-center">
-        Don't have an account? Sign up
+        Don&apos;t have an account? Sign up
       </a>
     </form>
   );

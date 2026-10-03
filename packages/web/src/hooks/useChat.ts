@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { useSession } from "next-auth/react";
 import { gql } from "@apollo/client";
 import { Message, StreamEvent } from "../types/chat";
 import { useModel } from "./useModel";
@@ -27,44 +28,10 @@ export function useChat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [progress, setProgress] = useState<string>("");
+  const { status: authStatus } = useSession();
   const { model } = useModel(); // shared with <ModelSelector /> via ModelProvider
   const { sessionId, startNewSession } = useSessionId();
   const abortController = useRef<AbortController | null>(null);
-
-  // Runs once sessionId becomes available (it starts null — see useSessionId's
-  // own comment on why). Restores a CONTINUING session's messages, or does
-  // nothing for a genuinely fresh one (the query just returns an empty array).
-  // This is what actually fixes "refresh wipes the chat".
-  useEffect(() => {
-    if (!sessionId) return;
-
-    apolloClient
-      .query<{ chatHistoryBySession: SessionHistoryItem[] }>({
-        query: GET_CHAT_HISTORY_BY_SESSION,
-        variables: { sessionId },
-        fetchPolicy: "network-only", // always get the current, real state on
-        // load — NOT Apollo's cache, which
-        // wouldn't have this data yet anyway
-      })
-      .then((res) => {
-        if (!res.data) return;
-
-        const restored: Message[] = res.data.chatHistoryBySession.flatMap(
-          (item) => [
-            { role: "user" as const, content: item.question },
-            { role: "assistant" as const, content: item.answer },
-          ]
-        );
-        if (restored.length > 0) {
-          setMessages(restored);
-        }
-      })
-      .catch((e) => {
-        console.error("[useChat] failed to restore session history:", e);
-      });
-    // deliberately only re-runs when sessionId itself changes (e.g., a
-    // future "New Chat" click) — not on every render
-  }, [sessionId]);
 
   async function restoreSessionHistory(
     sessionId: string
@@ -89,12 +56,12 @@ export function useChat() {
   }
 
   useEffect(() => {
-    if (!sessionId) return;
+    if (authStatus !== "authenticated" || !sessionId) return;
 
     restoreSessionHistory(sessionId).then((restored) => {
       if (restored && restored.length > 0) setMessages(restored);
     });
-  }, [sessionId]);
+  }, [authStatus, sessionId]);
 
   const appendToLastMessage = (text: string) => {
     setMessages((prev) => {

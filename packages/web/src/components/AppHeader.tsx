@@ -26,11 +26,7 @@ function AuthButton() {
     );
   }
 
-  return (
-    <Link href="/login" className="text-sm text-blue-500 hover:underline">
-      Log in
-    </Link>
-  );
+  return null;
 }
 
 // Standalone — invokes its own state (useSession) internally, takes zero props.

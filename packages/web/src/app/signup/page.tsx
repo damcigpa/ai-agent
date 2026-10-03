@@ -3,6 +3,8 @@
 import { useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
+const AUTH_ENABLED = false;
+
 export default function SignupPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -32,6 +34,14 @@ export default function SignupPage() {
 
     router.push("/login");
   };
+
+  if (!AUTH_ENABLED) {
+    return (
+      <main className="flex items-center justify-center h-screen">
+        <p className="text-sm text-gray-600">Sign up is temporarily unavailable.</p>
+      </main>
+    );
+  }
 
   return (
     <main className="flex flex-col items-center justify-center h-screen max-w-sm mx-auto p-4 gap-4">
