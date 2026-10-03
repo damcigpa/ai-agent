@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
   const findings = findingsFromHistory(history);
   const quiz = await quizSpoke(findings, questionCount ?? 5);
 
-  if (!quiz.questions.length) {
+  if (!Array.isArray(quiz?.questions) || quiz.questions.length === 0) {
     return NextResponse.json(
       { error: "Could not generate quiz questions. Please try again." },
       { status: 500 },

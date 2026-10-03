@@ -59,6 +59,24 @@ const tools: Anthropic.Tool[] = [
   },
 ];
 
+const OPTION_KEYS = ["A", "B", "C", "D"];
+
+// The model's tool input is not guaranteed to be complete (for example when the
+// answer is cut off), so only fully formed questions are kept.
+function isValidQuestion(q: unknown): q is QuizQuestion {
+  if (!q || typeof q !== "object") return false;
+  const x = q as Record<string, unknown>;
+  const options = x.options as Record<string, unknown> | undefined;
+  return (
+    typeof x.question === "string" &&
+    typeof x.explanation === "string" &&
+    typeof x.correct === "string" &&
+    OPTION_KEYS.includes(x.correct) &&
+    !!options &&
+    OPTION_KEYS.every((key) => typeof options[key] === "string")
+  );
+}
+
 export async function quizSpoke(
   findings: ResearchFindings,
   questionCount: number = 5,
@@ -66,7 +84,7 @@ export async function quizSpoke(
 ): Promise<Quiz> {
   const response = await client.messages.create({
     model,
-    max_tokens: 1024,
+    max_tokens: 4096,
     system: [
       {
         type: "text",
@@ -106,8 +124,16 @@ Generate exactly ${questionCount} questions.`,
     | Anthropic.ToolUseBlock
     | undefined;
 
+  if (response.stop_reason === "max_tokens") {
+    console.warn("  ⚠️  quizSpoke: the answer was cut off (max_tokens) — some questions may be missing");
+  }
+
   if (toolUse) {
-    return toolUse.input as Quiz;
+    const input = toolUse.input as { topic?: unknown; questions?: unknown };
+    return {
+      topic: typeof input.topic === "string" ? input.topic : findings.work || "Unknown topic",
+      questions: Array.isArray(input.questions) ? input.questions.filter(isValidQuestion) : [],
+    };
   }
 
   const error = createError(

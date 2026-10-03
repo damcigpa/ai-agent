@@ -1,18 +1,5 @@
-import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import {
-  DynamoDBDocumentClient,
-  PutCommand,
-  GetCommand,
-  UpdateCommand,
-  QueryCommand,
-} from "@aws-sdk/lib-dynamodb";
 import { randomUUID } from "crypto";
-import { Quiz, QuizQuestion } from "@exam-prep/agent/src/spokes/quizSpoke";
-
-const TABLE_NAME = "QuizSessions";
-const GSI_NAME = "userIndex"; 
-const client = new DynamoDBClient({});
-const docClient = DynamoDBDocumentClient.from(client);
+import type { Quiz, QuizQuestion } from "@exam-prep/agent/src/spokes/quizSpoke";
 
 export type QuizStatus = "in_progress" | "completed";
 
@@ -31,6 +18,16 @@ export interface QuizSessionItem {
   score: number;
   createdAt: string;
   updatedAt: string;
+}
+
+// Keep one process-local store shared across route bundles and Next dev reloads.
+const globalStore = globalThis as typeof globalThis & {
+  __quizSessions?: Map<string, QuizSessionItem>;
+};
+const sessions = (globalStore.__quizSessions ??= new Map());
+
+function storageKey(sessionId: string, quizId: string): string {
+  return JSON.stringify([sessionId, quizId]);
 }
 
 // --- Derive quiz status from answers ---
@@ -67,13 +64,7 @@ export async function createQuizSession(
     updatedAt: now,
   };
 
-  await docClient.send(
-    new PutCommand({
-      TableName: TABLE_NAME,
-      Item: item,
-    }),
-  );
-
+  sessions.set(storageKey(sessionId, item.quizId), item);
   return item;
 }
 
@@ -85,14 +76,7 @@ export async function getQuizSession(
   sessionId: string,
   quizId: string,
 ): Promise<QuizSessionItem | null> {
-  const result = await docClient.send(
-    new GetCommand({
-      TableName: TABLE_NAME,
-      Key: { sessionID: sessionId, quizId },
-    }),
-  );
-
-  return (result.Item as QuizSessionItem) ?? null;
+  return sessions.get(storageKey(sessionId, quizId)) ?? null;
 }
 
 // --- Thrown when the targeted question is already answered ---
@@ -137,35 +121,24 @@ export async function recordQuizAnswer(
 ): Promise<QuizSessionItem> {
   const now = new Date().toISOString();
 
-  try {
-    const result = await docClient.send(
-      new UpdateCommand({
-        TableName: TABLE_NAME,
-        Key: { sessionID: sessionId, quizId },
-        ConditionExpression: `answers[${questionIndex}].#status = :unanswered`,
-        UpdateExpression: `SET answers[${questionIndex}].#status = :answered, answers[${questionIndex}].wasCorrect = :wasCorrect, updatedAt = :now ADD score :inc`,
-        ExpressionAttributeNames: {
-          // "status" is a reserved word in DynamoDB's expression grammar
-          "#status": "status",
-        },
-        ExpressionAttributeValues: {
-          ":unanswered": "unanswered",
-          ":answered": "answered",
-          ":wasCorrect": wasCorrect,
-          ":now": now,
-          ":inc": wasCorrect ? 1 : 0,
-        },
-        ReturnValues: "ALL_NEW",
-      }),
-    );
-
-    return result.Attributes as QuizSessionItem;
-  } catch (e) {
-    if ((e as Error).name === "ConditionalCheckFailedException") {
-      throw new StaleQuizAnswerError(sessionId, quizId, questionIndex);
-    }
-    throw e;
+  const key = storageKey(sessionId, quizId);
+  const item = sessions.get(key);
+  if (!item || item.answers[questionIndex]?.status !== "unanswered") {
+    throw new StaleQuizAnswerError(sessionId, quizId, questionIndex);
   }
+
+  const updated: QuizSessionItem = {
+    ...item,
+    answers: item.answers.map((answer, index) =>
+      index === questionIndex
+        ? { status: "answered", wasCorrect }
+        : answer,
+    ),
+    score: item.score + (wasCorrect ? 1 : 0),
+    updatedAt: now,
+  };
+  sessions.set(key, updated);
+  return updated;
 }
 
 // --- List all quiz sessions for a user, newest first ---
@@ -174,15 +147,7 @@ export async function recordQuizAnswer(
 export async function getQuizHistoryByUser(
   userId: string,
 ): Promise<QuizSessionItem[]> {
-  const result = await docClient.send(
-    new QueryCommand({
-      TableName: TABLE_NAME,
-      IndexName: GSI_NAME,
-      KeyConditionExpression: "userId = :userId",
-      ExpressionAttributeValues: { ":userId": userId },
-      ScanIndexForward: false, // newest first — browse order, like getChatHistory
-    }),
-  );
-
-  return (result.Items as QuizSessionItem[]) ?? [];
+  return Array.from(sessions.values())
+    .filter((item) => item.userId === userId)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
