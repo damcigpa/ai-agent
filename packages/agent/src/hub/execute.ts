@@ -42,13 +42,15 @@ export async function executeSearchStep(
   explanation: Explanation | null,
   onEvent: (event: StreamEvent) => void,
   model: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  gaps: string[] = []
 ): Promise<StepResult> {
   onEvent(progressEvent("searching"));
+  // `gaps`: what the student's own material does not cover — the web search targets only that.
   const context = buildSearchContext({
     userMessage,
     alreadyFound: searchFindings,
-    missing: [],
+    missing: gaps,
   });
 
   let findings = await searchSpoke(context, subject, model, signal, onEvent);
@@ -59,7 +61,7 @@ export async function executeSearchStep(
     console.log(`  🔺 Escalation: ${findings.escalateReason}`);
     console.log("  🔄 Retrying with broader strategy...");
     const retryFindings = await searchSpoke(
-      buildSearchContext({ userMessage, alreadyFound: null, missing: [] }),
+      buildSearchContext({ userMessage, alreadyFound: null, missing: gaps }),
       subject,
       model,
       signal,
@@ -182,7 +184,8 @@ export async function executeStep(
   explanation: Explanation | null,
   onEvent: (event: StreamEvent) => void,
   model: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  gaps: string[] = []
 ): Promise<StepResult> {
   const stepLower = step.toLowerCase();
 
@@ -195,7 +198,7 @@ export async function executeStep(
   }
 
   if (stepLower.includes("search") || stepLower.includes("find")) {
-    return executeSearchStep(userMessage, subject, searchFindings, analysisFindings, explanation, onEvent, model, signal);
+    return executeSearchStep(userMessage, subject, searchFindings, analysisFindings, explanation, onEvent, model, signal, gaps);
   }
 
   return {

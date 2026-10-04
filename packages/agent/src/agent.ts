@@ -224,18 +224,10 @@ export async function chat(userMessage: string): Promise<string> {
     });
   }
 
-    // --- Library search (observation only) ---
-  // Runs before web search, prints what matched, but does not yet affect the answer.
-  // AC-12/13 will wire it into the answer in the next step.
+  // --- Library search ---
+  // Done once, here: the hits decide the off-topic override below, and the hub gets them
+  // to answer from the student's own material (AC-12, AC-13).
   const libraryHits = await searchLibraryFor(userMessage);
-  if (libraryHits.length) {
-    console.log(`\n  📒 Found ${libraryHits.length} matching chunk(s) in your library:`);
-    for (const hit of libraryHits) {
-      const preview = hit.text.length > 100 ? `${hit.text.slice(0, 100)}…` : hit.text;
-      console.log(`     [${hit.file}, chunk ${hit.chunkIndex}, distance ${hit.distance.toFixed(2)}] ${preview}`);
-    }
-    console.log("");
-  }
 
   const sanitized = sanitizeInput(userMessage);
   if (!sanitized) {
@@ -259,7 +251,9 @@ export async function chat(userMessage: string): Promise<string> {
   messages.push({ role: "user", content: sanitized });
 
   try {
-    const stream = hub(applyCache(messages), currentModel);
+    const stream = hub(applyCache(messages), currentModel, undefined, {
+      searchLibrary: async () => libraryHits,
+    });
     const reader = stream.getReader();
 
     let finalResponse = "";

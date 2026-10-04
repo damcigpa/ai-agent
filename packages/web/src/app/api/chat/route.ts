@@ -3,6 +3,7 @@ import type { StreamEvent } from "@exam-prep/agent/src/progress.js";
 import { randomUUID } from "crypto";
 import { auth } from "../../../../auth";
 import { saveChatHistory } from "../../../lib/chatHistory";
+import { getStore } from "../../../lib/library";
 
 export const runtime = "nodejs";
 
@@ -28,6 +29,18 @@ function toSSE(
   });
 }
 
+// The student's own material: the hub searches it before any web research (RAG).
+// A failure (for example a missing Voyage key) only means the answer comes from the web.
+async function searchLibrary(question: string) {
+  try {
+    const store = await getStore();
+    return await store.search(question, 5);
+  } catch (error) {
+    console.error("[library search] skipped:", error);
+    return [];
+  }
+}
+
 export async function POST(req: NextRequest) {
   const { message, model, sessionId } = await req.json();
 
@@ -46,17 +59,18 @@ export async function POST(req: NextRequest) {
   const agentStream = hub(
     [{ role: "user", content: message }],
     model ?? "claude-haiku-4-5-20251001",
-    req.signal
+    req.signal,
+    { searchLibrary }
   );
 
   return new Response(
     agentStream.pipeThrough(toSSE(userId, activeSessionId, message)),
     {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
-    },
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      },
     },
   );
 }

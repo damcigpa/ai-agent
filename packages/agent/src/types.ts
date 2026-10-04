@@ -18,6 +18,8 @@ export interface ResearchFindings {
   sources: string[];
   subject?: Subject;
   keyFacts?: string[];
+  // Facts the student's own material states, each with the file it came from.
+  materialFacts?: { fact: string; file: string }[];
   escalate?: boolean;
   escalateReason?: string;
 }

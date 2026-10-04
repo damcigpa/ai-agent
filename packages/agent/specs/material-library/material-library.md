@@ -46,6 +46,7 @@ student's material and which from the web.
 - Deleting or renaming material from within the app
 - Steering the source per question ("only from my notes", "ignore my notes")
 - Size limits for the library
+- Checking material against web sources when the material fully answers the question (there is no web research then; a     "suspicion check" was rejected because misread handwriting would raise false alarms)
 
 ## Acceptance criteria — CLI
 
@@ -71,7 +72,7 @@ student's material and which from the web.
 - **AC-13** If the material covers the question, the answer is based on it. Web research is used only for what the material does not cover.
 - **AC-14** Each part of the answer shows where it came from: 📒 with the file name for the student's material, 🌐 with the source for web research. The sources section lists both.
 - **AC-15** Nothing is attributed to the student's material unless it is actually in the retrieved material.
-- **AC-16** If a trusted source contradicts the student's material, the answer says so explicitly, so the student can check their notes. It does not silently choose one side.
+- **AC-16** If a trusted source contradicts the student's material, the answer shows both statements with their sources.    When the web research has high confidence, the answer also says which one is probably correct and why; otherwise it says it is unclear and asks the student to check their notes. Neither statement is dropped silently.
 - **AC-17** If the library has nothing relevant to the question, or is empty, the answer works exactly as today (web research only).
 - **AC-18** If web research fails, the agent answers from the material alone and says that no supplementation happened.
 - **AC-19** `/quiz` after an answer generates questions from that answer's findings, including the parts that came from the material.

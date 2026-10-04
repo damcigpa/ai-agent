@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { ResearchFindings } from "../types.js";
+import { ResearchFindings, Subject } from "../types.js";
 import { AnalysisFindings } from "../spokes/analyzeSpoke.js";
 import { Explanation } from "../spokes/explainSpoke.js";
 import { createError, formatError } from "../errors.js";
@@ -8,6 +8,8 @@ import { executeStep } from "./execute.js";
 import { formatOutput, formatAnalysis } from "./format.js";
 import { StreamEvent } from "../progress.js";
 import { readScratchpad, resetScratchpad, updateScratchpad } from "../tools/scratchpad.js";
+import { judgeMaterial, MaterialJudgement } from "../spokes/librarySpoke.js";
+import type { SearchHit } from "../library/vectorStore.js";
 
 const MAX_TURNS = 10;
 
@@ -20,10 +22,41 @@ const emptyFindings: ResearchFindings = {
   sources: [],
 };
 
+export interface HubOptions {
+  // Searches the student's own material (the CLI and the web app each pass their own).
+  // Optional: without it the hub works exactly as before.
+  searchLibrary?: (question: string) => Promise<SearchHit[]>;
+}
+
+// Same order as the router in execute.ts: "explain the findings" contains "find",
+// but it is an explain step, not a search step.
+function isSearchStep(step: string): boolean {
+  const s = step.toLowerCase();
+  return !s.includes("explain") && !s.includes("analyz") && (s.includes("search") || s.includes("find"));
+}
+
+// Adds the student's material to findings. Material facts are kept separately for the
+// 📒 labels (AC-14) and also added to keyFacts so /quiz covers them (AC-19).
+function withMaterial(
+  base: ResearchFindings | null,
+  material: MaterialJudgement,
+  subject: Subject,
+): ResearchFindings {
+  const facts = material.materialFacts.map((m) => m.fact);
+  const findings: ResearchFindings = base ?? { ...emptyFindings, subject, confidence: "high" };
+  return {
+    ...findings,
+    context: findings.context || facts.join(" "),
+    keyFacts: [...new Set([...facts, ...(findings.keyFacts ?? [])])],
+    materialFacts: material.materialFacts,
+  };
+}
+
 export function hub(
   messages: Anthropic.MessageParam[],
   model: string = "claude-haiku-4-5-20251001",
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  options: HubOptions = {}
 ): ReadableStream<StreamEvent> {
   return new ReadableStream<StreamEvent>({
     async start(controller) {
@@ -54,6 +87,8 @@ export function hub(
         );
 
         if (newTopic) resetScratchpad();
+        // After a reset the scratchpad read above is stale: never write its old findings back.
+        const baseScratchpad = newTopic ? null : scratchpad;
 
         let remainingSteps = steps;
         enqueue({ type: "progress", data: `📚 Subject: ${subject}` });
@@ -72,6 +107,38 @@ export function hub(
 
         if (searchFindings) {
           enqueue({ type: "progress", data: "📦 Reusing findings from previous turn" });
+        }
+
+        // 4. Material step (TD-7): look at the student's own material before the planned
+        //    research. Fixed code, not a planner decision, so it always runs (AC-12).
+        //    Only for research plans: an analysis plan has no search step to replace.
+        let material: MaterialJudgement | null = null;
+        let gaps: string[] = [];
+
+        if (options.searchLibrary && steps.some(isSearchStep)) {
+          checkAborted();
+          const hits = await options.searchLibrary(userMessage).catch(() => [] as SearchHit[]);
+
+          if (hits.length) {
+            enqueue({ type: "progress", data: "📒 Checking your material..." });
+            const judgement = await judgeMaterial(userMessage, hits, model, signal);
+            if (judgement.coverage !== "none") material = judgement; // "none" → unchanged flow (AC-17)
+          }
+
+          if (material?.coverage === "full") {
+            // AC-13: the material answers the question — no web research
+            remainingSteps = remainingSteps.filter((step) => !isSearchStep(step));
+            if (!remainingSteps.some((step) => step.toLowerCase().includes("explain"))) {
+              remainingSteps.push("explain the findings clearly");
+            }
+            searchFindings = withMaterial(null, material, subject);
+            enqueue({ type: "progress", data: "📒 Your material covers the question — no web search needed" });
+            enqueue({ type: "progress", data: `📋 Plan: ${remainingSteps.join(" → ")}` });
+          } else if (material?.coverage === "partial") {
+            // AC-13: web research only for what the material does not cover
+            gaps = material.missing;
+            enqueue({ type: "progress", data: "📒 Your material covers part of the question — searching the web for the rest" });
+          }
         }
 
         let explanation: Explanation | null = null;
@@ -94,10 +161,11 @@ export function hub(
               explanation,
               enqueue,
               model,
-              signal
+              signal,
+              gaps
             );
 
-          searchFindings = updatedFindings;
+          searchFindings = material ? withMaterial(updatedFindings, material, subject) : updatedFindings;
           explanation = updatedExplanation;
 
           // Handle analyze step result
@@ -125,18 +193,18 @@ export function hub(
           analysisFindings = updatedAnalysis?.synopsis ? updatedAnalysis : null;
 
           // Update scratchpad
-          if (updatedFindings || updatedAnalysis) {
+          if (searchFindings || updatedAnalysis) {
             updateScratchpad(readScratchpad(), {
               subject,
               topic,
-              findings: updatedFindings
-                ? [...(scratchpad?.findings ?? []), updatedFindings]
-                : scratchpad?.findings ?? [],
+              findings: searchFindings
+                ? [...(baseScratchpad?.findings ?? []), searchFindings]
+                : baseScratchpad?.findings ?? [],
               analysis: updatedAnalysis
-                ? [...(scratchpad?.analysis ?? []), updatedAnalysis]
-                : scratchpad?.analysis ?? [],
+                ? [...(baseScratchpad?.analysis ?? []), updatedAnalysis]
+                : baseScratchpad?.analysis ?? [],
               conversationTopics: [
-                ...(scratchpad?.conversationTopics ?? []),
+                ...(baseScratchpad?.conversationTopics ?? []),
                 userMessage,
               ],
             });

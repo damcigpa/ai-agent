@@ -57,11 +57,11 @@ The hub runs a fixed **material step before the planned steps** of every questio
    - `none` → existing flow, as if the library were empty (AC-17),
    - `full` → no web search; the explain step works from the material facts (AC-13),
    - `partial` → the existing search step runs with `buildSearchContext({ alreadyFound, missing })`, which already supports this shape (AC-13).
-4. **Contradictions:** when both material facts and web findings exist, the explain step is instructed to list statements where they disagree, and the output shows them (AC-16).
+4. **Contradictions:** when both material facts and web findings exist (partial coverage), a separate compare call lists the disagreements: material statement, web statement, `likelyCorrect` (`material` | `web` | `unclear`) and a reason. `material` or `web` is only allowed when the web findings have `high` confidence; this is enforced in code, not only in the prompt. The output shows them in their own section (AC-16). With full coverage there is no web research and no check.
 5. **Web failure:** if the search step returns empty findings, the answer is built from the material alone with a notice (AC-18).
 
 ### TD-8 Findings and output format (AC-14, AC-19)
-- `ResearchFindings` gets optional fields: `materialFacts?: { fact: string; file: string }[]`, `contradictions?: string[]`, `webSupplementFailed?: boolean`. Optional, so all existing code keeps working.
+- `ResearchFindings` gets optional fields: `materialFacts?: { fact: string; file: string }[]`, `contradictions?: { material: string; file: string; web: string; likelyCorrect: "material" | "web" | "unclear"; reason: string }[]`, `webSupplementFailed?: boolean`. Optional, so all existing code keeps working.
 - `format.ts`: material facts are shown with 📒 and the file name, web sources with 🌐; the sources section lists both; contradictions get their own section.
 - `/quiz` reads the last findings; material facts are added to `keyFacts`, so questions cover them (AC-19).
 
