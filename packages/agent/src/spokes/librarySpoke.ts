@@ -10,6 +10,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { client } from "../client.js";
 import { trackUsage } from "../tokenTracker.js";
 import type { SearchHit } from "../library/vectorStore.js";
+import type { Contradiction, ResearchFindings } from "../types.js";
 
 export interface MaterialFact {
   fact: string;
@@ -59,6 +60,14 @@ const tools: Anthropic.Tool[] = [
   },
 ];
 
+// The model sometimes copies more than the file name ("1000003153.jpg, part 3"), so the
+// known name is looked for inside what it returned. Longest names first, so "aa.jpg" is
+// not mistaken for "a.jpg". Returns undefined for a file that is not known (AC-15).
+function pickFile(value: unknown, knownFiles: string[]): string | undefined {
+  if (typeof value !== "string") return undefined;
+  return [...knownFiles].sort((a, b) => b.length - a.length).find((name) => value.includes(name));
+}
+
 export async function judgeMaterial(
   question: string,
   hits: SearchHit[],
@@ -103,15 +112,11 @@ export async function judgeMaterial(
     };
 
     // AC-15: a fact is kept only if it names a file that was really retrieved.
-    // The model sometimes copies more than the name ("1000003153.jpg, part 3"), so the
-    // retrieved name is looked for inside what it returned. Longest names first, so
-    // "aa.jpg" is not mistaken for "a.jpg".
-    const retrievedFiles = [...new Set(hits.map((hit) => hit.file))].sort((a, b) => b.length - a.length);
+    const retrievedFiles = [...new Set(hits.map((hit) => hit.file))];
     const materialFacts: MaterialFact[] = [];
     let ignored = 0;
     for (const f of Array.isArray(input.materialFacts) ? input.materialFacts : []) {
-      const file =
-        f && typeof f.file === "string" ? retrievedFiles.find((name) => f.file.includes(name)) : undefined;
+      const file = f ? pickFile(f.file, retrievedFiles) : undefined;
       if (!file || typeof f.fact !== "string" || f.fact.trim() === "") {
         ignored++;
         continue;
@@ -138,5 +143,116 @@ export async function judgeMaterial(
   } catch (e) {
     console.warn(`  ⚠️  Material check failed, continuing without it: ${e instanceof Error ? e.message : "unknown error"}`);
     return NONE;
+  }
+}
+
+// --- Contradictions (AC-16) -------------------------------------------------
+// Compares the material facts with the web findings of the same question. Runs only
+// when both exist (partial coverage). Never throws: a failure means "no contradictions".
+
+const COMPARE_PROMPT = `You compare facts from a student's own notes with web research findings on the same question.
+Rules:
+- Report ONLY real contradictions: the notes and the web findings state different things about the same point (a different date, name, number, cause or outcome).
+- Something the notes do not mention, or extra detail in the web findings, is NOT a contradiction.
+- For each contradiction give the statement from the notes, the file it came from, what the web findings say, which one is probably correct ("material", "web" or "unclear") and a short reason.
+- Choose "material" or "web" only if you are confident; otherwise "unclear".
+- Write in the language of the notes.
+- If there is no contradiction, return an empty list.`;
+
+const compareTools: Anthropic.Tool[] = [
+  {
+    name: "report_contradictions",
+    description: "Submit the contradictions between the student's notes and the web findings",
+    input_schema: {
+      type: "object",
+      properties: {
+        contradictions: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              material: { type: "string", description: "What the notes say" },
+              file: { type: "string", description: "The file name of that note" },
+              web: { type: "string", description: "What the web findings say" },
+              likelyCorrect: { type: "string", enum: ["material", "web", "unclear"] },
+              reason: { type: "string" },
+            },
+            required: ["material", "file", "web", "likelyCorrect", "reason"],
+          },
+        },
+      },
+      required: ["contradictions"],
+    },
+  },
+];
+
+export async function compareWithWeb(
+  question: string,
+  materialFacts: MaterialFact[],
+  web: ResearchFindings,
+  model: string = "claude-haiku-4-5-20251001",
+  signal?: AbortSignal,
+): Promise<Contradiction[]> {
+  const webFacts = web.keyFacts ?? [];
+  if (materialFacts.length === 0 || (!web.context && webFacts.length === 0)) return [];
+
+  const notes = materialFacts.map((m) => `- (${m.file}) ${m.fact}`).join("\n");
+  const findings = [
+    `Confidence: ${web.confidence}`,
+    `Context: ${web.context}`,
+    webFacts.length ? `Key facts:\n${webFacts.map((f) => `- ${f}`).join("\n")}` : "",
+    web.sources.length ? `Sources: ${web.sources.join(", ")}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  try {
+    const response = await client.messages.create(
+      {
+        model,
+        max_tokens: 1500,
+        system: COMPARE_PROMPT,
+        tools: compareTools,
+        tool_choice: { type: "tool", name: "report_contradictions" },
+        messages: [
+          {
+            role: "user",
+            content: `Question: "${question}"\n\nFacts from the student's notes:\n${notes}\n\nWeb research findings:\n${findings}`,
+          },
+        ],
+      },
+      { signal },
+    );
+
+    trackUsage(response.usage);
+
+    const toolUse = response.content.find((b) => b.type === "tool_use") as
+      | Anthropic.ToolUseBlock
+      | undefined;
+    const raw = (toolUse?.input as { contradictions?: unknown } | undefined)?.contradictions;
+
+    const materialFiles = [...new Set(materialFacts.map((m) => m.file))];
+    const contradictions: Contradiction[] = [];
+    for (const c of Array.isArray(raw) ? raw : []) {
+      const file = c ? pickFile(c.file, materialFiles) : undefined;
+      if (!file || typeof c.material !== "string" || !c.material.trim() || typeof c.web !== "string" || !c.web.trim()) {
+        continue;
+      }
+      const verdict = c.likelyCorrect === "material" || c.likelyCorrect === "web" ? c.likelyCorrect : "unclear";
+      contradictions.push({
+        material: c.material.trim(),
+        file,
+        web: c.web.trim(),
+        // AC-16: a verdict only when the web research was highly confident
+        likelyCorrect: web.confidence === "high" ? verdict : "unclear",
+        reason: typeof c.reason === "string" ? c.reason.trim() : "",
+      });
+    }
+
+    console.log(`  📒 Contradiction check: ${contradictions.length} found (web confidence: ${web.confidence})`);
+    return contradictions;
+  } catch (e) {
+    console.warn(`  ⚠️  Contradiction check failed, continuing without it: ${e instanceof Error ? e.message : "unknown error"}`);
+    return [];
   }
 }

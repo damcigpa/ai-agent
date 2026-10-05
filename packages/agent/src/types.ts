@@ -9,6 +9,15 @@ export type Subject =
   | "hungarian_literature"
   | "general";
 
+// One point where the student's material and the web sources disagree (AC-16).
+export interface Contradiction {
+  material: string; // what the student's material says
+  file: string; // the material file it is in
+  web: string; // what the web sources say
+  likelyCorrect: "material" | "web" | "unclear"; // "unclear" unless the web research was highly confident
+  reason: string;
+}
+
 export interface ResearchFindings {
   author: string;
   work: string;
@@ -20,6 +29,8 @@ export interface ResearchFindings {
   keyFacts?: string[];
   // Facts the student's own material states, each with the file it came from.
   materialFacts?: { fact: string; file: string }[];
+  // Statements where the material and the web sources disagree (AC-16).
+  contradictions?: Contradiction[];
   escalate?: boolean;
   escalateReason?: string;
 }

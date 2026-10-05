@@ -1,6 +1,12 @@
-import { ResearchFindings } from "../types.js";
+import { Contradiction, ResearchFindings } from "../types.js";
 import { AnalysisFindings } from "../spokes/analyzeSpoke.js";
 import { Explanation } from "../spokes/explainSpoke.js";
+
+const VERDICT: Record<Contradiction["likelyCorrect"], string> = {
+  web: "The sources are probably right",
+  material: "Your material is probably right",
+  unclear: "Unclear — please check your notes",
+};
 
 export function formatOutput(
   findings: ResearchFindings,
@@ -36,6 +42,18 @@ export function formatOutput(
   if (materialFacts.length) {
     lines.push("## 📒 From your material");
     materialFacts.forEach((m) => lines.push(`- ${m.fact} (${m.file})`));
+    lines.push("");
+  }
+
+  // Where the material and the sources disagree: both sides are shown, never dropped (AC-16)
+  const contradictions = findings.contradictions ?? [];
+  if (contradictions.length) {
+    lines.push("## ⚠️ Your material and the sources disagree");
+    contradictions.forEach((c) => {
+      lines.push(`- 📒 Your material: ${c.material} (${c.file})`);
+      lines.push(`  - 🌐 Sources: ${c.web}`);
+      lines.push(`  - → ${VERDICT[c.likelyCorrect]}${c.reason ? ` — ${c.reason}` : ""}`);
+    });
     lines.push("");
   }
 

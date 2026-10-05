@@ -8,7 +8,7 @@ import { executeStep } from "./execute.js";
 import { formatOutput, formatAnalysis } from "./format.js";
 import { StreamEvent } from "../progress.js";
 import { readScratchpad, resetScratchpad, updateScratchpad } from "../tools/scratchpad.js";
-import { judgeMaterial, MaterialJudgement } from "../spokes/librarySpoke.js";
+import { compareWithWeb, judgeMaterial, MaterialJudgement } from "../spokes/librarySpoke.js";
 import type { SearchHit } from "../library/vectorStore.js";
 
 const MAX_TURNS = 10;
@@ -167,6 +167,25 @@ export function hub(
 
           searchFindings = material ? withMaterial(updatedFindings, material, subject) : updatedFindings;
           explanation = updatedExplanation;
+
+          // AC-16: after a web search, compare the material with what the web found
+          // (only with partial coverage: full coverage has no web search to compare with)
+          if (material && searchFindings && updatedFindings && isSearchStep(currentStep)) {
+            const contradictions = await compareWithWeb(
+              userMessage,
+              material.materialFacts,
+              updatedFindings, // the web findings alone, before the material was merged in
+              model,
+              signal
+            );
+            searchFindings = { ...searchFindings, contradictions };
+            if (contradictions.length) {
+              enqueue({
+                type: "progress",
+                data: `⚠️  Your material and the web disagree on ${contradictions.length} point(s)`,
+              });
+            }
+          }
 
           // Handle analyze step result
           if (currentStep.toLowerCase().includes("analyz")) {
