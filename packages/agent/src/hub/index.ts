@@ -36,7 +36,7 @@ function isSearchStep(step: string): boolean {
 }
 
 // Adds the student's material to findings. Material facts are kept separately for the
-// 📒 labels (AC-14) and also added to keyFacts so /quiz covers them (AC-19).
+// 📒 labels (Sources are labelled) and also added to keyFacts so /quiz covers them (Quiz covers the material).
 function withMaterial(
   base: ResearchFindings | null,
   material: MaterialJudgement,
@@ -109,8 +109,8 @@ export function hub(
           enqueue({ type: "progress", data: "📦 Reusing findings from previous turn" });
         }
 
-        // 4. Material step (TD-7): look at the student's own material before the planned
-        //    research. Fixed code, not a planner decision, so it always runs (AC-12).
+        // 4. Material step (D6): look at the student's own material before the planned
+        //    research. Fixed code, not a planner decision, so it always runs (The library is searched first).
         //    Only for research plans: an analysis plan has no search step to replace.
         let material: MaterialJudgement | null = null;
         let gaps: string[] = [];
@@ -122,11 +122,11 @@ export function hub(
           if (hits.length) {
             enqueue({ type: "progress", data: "📒 Checking your material..." });
             const judgement = await judgeMaterial(userMessage, hits, model, signal);
-            if (judgement.coverage !== "none") material = judgement; // "none" → unchanged flow (AC-17)
+            if (judgement.coverage !== "none") material = judgement; // "none" → unchanged flow (No relevant material changes nothing)
           }
 
           if (material?.coverage === "full") {
-            // AC-13: the material answers the question — no web research
+            // Material-first answers: the material answers the question — no web research
             remainingSteps = remainingSteps.filter((step) => !isSearchStep(step));
             if (!remainingSteps.some((step) => step.toLowerCase().includes("explain"))) {
               remainingSteps.push("explain the findings clearly");
@@ -135,7 +135,7 @@ export function hub(
             enqueue({ type: "progress", data: "📒 Your material covers the question — no web search needed" });
             enqueue({ type: "progress", data: `📋 Plan: ${remainingSteps.join(" → ")}` });
           } else if (material?.coverage === "partial") {
-            // AC-13: web research only for what the material does not cover
+            // Material-first answers: web research only for what the material does not cover
             gaps = material.missing;
             enqueue({ type: "progress", data: "📒 Your material covers part of the question — searching the web for the rest" });
           }
@@ -168,7 +168,7 @@ export function hub(
           searchFindings = material ? withMaterial(updatedFindings, material, subject) : updatedFindings;
           explanation = updatedExplanation;
 
-          // AC-16: after a web search, compare the material with what the web found
+          // Contradictions are shown, never silently resolved: after a web search, compare the material with what the web found
           // (only with partial coverage: full coverage has no web search to compare with)
           if (material && searchFindings && updatedFindings && isSearchStep(currentStep)) {
             const contradictions = await compareWithWeb(

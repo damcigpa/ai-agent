@@ -1,6 +1,6 @@
 // Extract: turns one library file into plain text.
-// Implements specs/material-library/material-library.md — AC-11
-// (and AC-6: a file that cannot be processed is reported, it does not stop the others).
+// Implements the material-library spec: Text in photos is extracted without guessing.
+// (and Processing with progress, per-file failures: a file that cannot be processed is reported, it does not stop the others).
 //
 // Text files are read directly. Photos are read by the model (vision), which is
 // told to transcribe and never guess. Never throws: failures come back as a result.

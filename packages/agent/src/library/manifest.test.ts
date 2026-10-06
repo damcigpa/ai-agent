@@ -1,4 +1,5 @@
-// Verifies specs/material-library/material-library.plan.md — TD-4 (serves AC-9, AC-10).
+// Verifies the material-library spec: Unchanged material is not processed again; Changes made outside the app are detected.
+// Design (add-material-library): D4.
 // Real files in a temp folder, no API.
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
@@ -48,7 +49,7 @@ describe("readManifest / writeManifest", () => {
     expect(readManifest(manifestPath)).toEqual({});
   });
 
-  it("A-3: what is written can be read back after a restart", () => {
+  it("Persistence: what is written can be read back after a restart", () => {
     const manifest: Manifest = { "jegyzet.txt": entry("abc") };
 
     writeManifest(manifest, manifestPath); // also creates the data/ folder
@@ -71,7 +72,7 @@ describe("readManifest / writeManifest", () => {
 });
 
 describe("planSync", () => {
-  it("AC-9: an unchanged file is not processed again", () => {
+  it("Unchanged material is not processed again: an unchanged file is not processed again", () => {
     const plan = planSync([{ name: "a.txt", sha256: "h1" }], { "a.txt": entry("h1") });
 
     expect(plan).toEqual({ toProcess: [], unchanged: ["a.txt"], removed: [] });
@@ -83,13 +84,13 @@ describe("planSync", () => {
     expect(plan).toEqual({ toProcess: ["uj.txt"], unchanged: [], removed: [] });
   });
 
-  it("AC-10: a file changed by hand is processed again", () => {
+  it("Changes made outside the app are detected: a file changed by hand is processed again", () => {
     const plan = planSync([{ name: "a.txt", sha256: "uj-hash" }], { "a.txt": entry("regi-hash") });
 
     expect(plan.toProcess).toEqual(["a.txt"]);
   });
 
-  it("AC-10: a file removed by hand is reported as removed", () => {
+  it("Changes made outside the app are detected: a file removed by hand is reported as removed", () => {
     const plan = planSync([], { "torolt.jpg": entry("h1") });
 
     expect(plan).toEqual({ toProcess: [], unchanged: [], removed: ["torolt.jpg"] });

@@ -1,4 +1,4 @@
-// Verifies specs/material-library/material-library.md — AC-11, and AC-6 (per-file failure).
+// Verifies the material-library spec: Text in photos is extracted without guessing; Processing with progress, per-file failures.
 // Mocked Anthropic client: no network, no cost.
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
@@ -58,7 +58,7 @@ describe("text files", () => {
 });
 
 describe("images", () => {
-  it("AC-11: sends the photo to the model and returns the transcription", async () => {
+  it("Text in photos is extracted without guessing: sends the photo to the model and returns the transcription", async () => {
     reply({ text: "A mohácsi csata 1526-ban volt.", unreadableParts: [] });
 
     const result = await extractText(file("oldal1.jpg", Buffer.from([1, 2, 3])), "test-model");
@@ -89,7 +89,7 @@ describe("images", () => {
     expect(create.mock.calls[1][0].messages[0].content[0].source.media_type).toBe("image/jpeg");
   });
 
-  it("AC-11: keeps the unreadable markers and lists the unreadable parts", async () => {
+  it("Text in photos is extracted without guessing: keeps the unreadable markers and lists the unreadable parts", async () => {
     reply({
       text: `II. Lajos ${UNREADABLE_MARKER} csatában esett el.`,
       unreadableParts: ["a szó II. Lajos után"],
@@ -104,7 +104,7 @@ describe("images", () => {
     expect(result.ok && result.text).toContain(UNREADABLE_MARKER);
   });
 
-  it("AC-11: the prompt tells the model to transcribe and never guess", async () => {
+  it("Text in photos is extracted without guessing: the prompt tells the model to transcribe and never guess", async () => {
     reply({ text: "x", unreadableParts: [] });
 
     await extractText(file("a.jpg", Buffer.from([1])));
@@ -114,7 +114,7 @@ describe("images", () => {
     expect(system).toContain(UNREADABLE_MARKER);
   });
 
-  it("AC-6: a photo without readable text is reported", async () => {
+  it("Processing with progress, per-file failures: a photo without readable text is reported", async () => {
     reply({ text: "   ", unreadableParts: [] });
 
     expect(await extractText(file("homalyos.jpg", Buffer.from([1])))).toEqual({
@@ -123,7 +123,7 @@ describe("images", () => {
     });
   });
 
-  it("AC-6: an API failure is reported as a result, it does not throw", async () => {
+  it("Processing with progress, per-file failures: an API failure is reported as a result, it does not throw", async () => {
     create.mockRejectedValueOnce(new Error("429 rate limit"));
 
     const result = await extractText(file("a.jpg", Buffer.from([1])));
@@ -131,7 +131,7 @@ describe("images", () => {
     expect(result).toEqual({ ok: false, reason: "429 rate limit" });
   });
 
-  it("AC-6: a response without a tool call is reported", async () => {
+  it("Processing with progress, per-file failures: a response without a tool call is reported", async () => {
     create.mockResolvedValueOnce({ content: [{ type: "text", text: "hm" }], usage: { input_tokens: 1, output_tokens: 1 } });
 
     expect(await extractText(file("a.jpg", Buffer.from([1])))).toEqual({
@@ -151,7 +151,7 @@ describe("images", () => {
 });
 
 describe("other cases", () => {
-  it("AC-6: a missing file is reported, it does not throw", async () => {
+  it("Processing with progress, per-file failures: a missing file is reported, it does not throw", async () => {
     const result = await extractText(join(root, "nincs.txt"));
 
     expect(result.ok).toBe(false);

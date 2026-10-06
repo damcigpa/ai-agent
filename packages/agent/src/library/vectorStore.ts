@@ -1,5 +1,7 @@
 // Vector store: the searchable index of the library's text chunks.
-// Implements specs/material-library/material-library.plan.md — TD-1, TD-2 (serves AC-9, AC-10, AC-12).
+// Implements the material-library spec: Unchanged material is not processed again; Changes made outside the app are detected.
+// Implements the material-answers spec: The library is searched first.
+// Design (add-material-library): D1, D2.
 //
 // LanceDB is used through its native API (the LangChain wrapper has no delete and no
 // filter). Embeddings are injected, so tests run with fake vectors and no network.
@@ -33,9 +35,9 @@ export interface ChunkStore {
   // Deletes every chunk of `file` first, then writes the new ones. Safe to call for a
   // file that is already indexed — it never leaves duplicates (manifest loss is harmless).
   replaceFile(file: string, fileHash: string, chunks: Chunk[]): Promise<void>;
-  // Removes every chunk of `file` (AC-10). A no-op if there are none.
+  // Removes every chunk of `file` (Changes made outside the app are detected). A no-op if there are none.
   deleteFile(file: string): Promise<void>;
-  // The `k` chunks closest in meaning to `query`. Empty if nothing is indexed (AC-17).
+  // The `k` chunks closest in meaning to `query`. Empty if nothing is indexed (No relevant material changes nothing).
   search(query: string, k: number): Promise<SearchHit[]>;
 }
 

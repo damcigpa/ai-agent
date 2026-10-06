@@ -1,6 +1,6 @@
 // Sync: brings the search index in line with the files in library/.
-// Implements specs/material-library/material-library.plan.md — TD-4
-// (serves AC-6, AC-9, AC-10, AC-11).
+// Implements the material-library spec: Processing with progress, per-file failures; Unchanged material is not processed again; Changes made outside the app are detected; Text in photos is extracted without guessing.
+// Design (add-material-library): D4.
 //
 // For each library file: unchanged → skipped (no API calls); new or changed → text is
 // extracted, split into chunks, embedded and indexed; removed → its chunks are deleted.
@@ -34,9 +34,9 @@ export interface SyncOptions {
 
 export interface SyncReport {
   processed: string[]; // new or changed files that are now indexed
-  unchanged: string[]; // skipped — no extraction, no embedding (AC-9)
-  removed: string[];   // gone from library/, chunks deleted (AC-10)
-  failed: { file: string; reason: string }[]; // reported by name (AC-6)
+  unchanged: string[]; // skipped — no extraction, no embedding (Unchanged material is not processed again)
+  removed: string[];   // gone from library/, chunks deleted (Changes made outside the app are detected)
+  failed: { file: string; reason: string }[]; // reported by name (Processing with progress, per-file failures)
 }
 
 export async function syncLibrary(options: SyncOptions): Promise<SyncReport> {
@@ -70,7 +70,7 @@ export async function syncLibrary(options: SyncOptions): Promise<SyncReport> {
     writeManifest(manifest, manifestPath);
   };
 
-  // AC-10: removed by hand outside the app
+  // Changes made outside the app are detected: removed by hand outside the app
   for (const file of plan.removed) {
     await forget(file);
     report.removed.push(file);

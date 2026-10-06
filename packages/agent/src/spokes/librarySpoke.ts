@@ -1,6 +1,6 @@
 // Material judge: compares a question with chunks from the student's own material.
-// Implements specs/material-library/material-library.plan.md — TD-7 step 2
-// (serves AC-13, AC-15, AC-17).
+// Implements the material-answers spec: Material-first answers; Nothing is wrongly attributed to the material; No relevant material changes nothing.
+// Design (add-material-library): D6.
 //
 // It decides how much of the question the material covers and extracts the facts
 // the material really states, each with the file it came from. Never throws:
@@ -62,7 +62,7 @@ const tools: Anthropic.Tool[] = [
 
 // The model sometimes copies more than the file name ("1000003153.jpg, part 3"), so the
 // known name is looked for inside what it returned. Longest names first, so "aa.jpg" is
-// not mistaken for "a.jpg". Returns undefined for a file that is not known (AC-15).
+// not mistaken for "a.jpg". Returns undefined for a file that is not known (Nothing is wrongly attributed to the material).
 function pickFile(value: unknown, knownFiles: string[]): string | undefined {
   if (typeof value !== "string") return undefined;
   return [...knownFiles].sort((a, b) => b.length - a.length).find((name) => value.includes(name));
@@ -74,7 +74,7 @@ export async function judgeMaterial(
   model: string = "claude-haiku-4-5-20251001",
   signal?: AbortSignal,
 ): Promise<MaterialJudgement> {
-  if (hits.length === 0) return NONE; // empty library or nothing found: no call needed (AC-17)
+  if (hits.length === 0) return NONE; // empty library or nothing found: no call needed (No relevant material changes nothing)
 
   const excerpts = hits
     .map((hit) => `File: ${hit.file}\nPart: ${hit.chunkIndex + 1}\n${hit.text}`)
@@ -111,7 +111,7 @@ export async function judgeMaterial(
       missing?: unknown;
     };
 
-    // AC-15: a fact is kept only if it names a file that was really retrieved.
+    // Nothing is wrongly attributed to the material: a fact is kept only if it names a file that was really retrieved.
     const retrievedFiles = [...new Set(hits.map((hit) => hit.file))];
     const materialFacts: MaterialFact[] = [];
     let ignored = 0;
@@ -146,7 +146,7 @@ export async function judgeMaterial(
   }
 }
 
-// --- Contradictions (AC-16) -------------------------------------------------
+// --- Contradictions (Contradictions are shown, never silently resolved) -------------------------------------------------
 // Compares the material facts with the web findings of the same question. Runs only
 // when both exist (partial coverage). Never throws: a failure means "no contradictions".
 
@@ -243,7 +243,7 @@ export async function compareWithWeb(
         material: c.material.trim(),
         file,
         web: c.web.trim(),
-        // AC-16: a verdict only when the web research was highly confident
+        // Contradictions are shown, never silently resolved: a verdict only when the web research was highly confident
         likelyCorrect: web.confidence === "high" ? verdict : "unclear",
         reason: typeof c.reason === "string" ? c.reason.trim() : "",
       });

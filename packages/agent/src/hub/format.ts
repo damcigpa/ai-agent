@@ -37,7 +37,7 @@ export function formatOutput(
     lines.push("");
   }
 
-  // Facts from the student's own material, with the file they came from (AC-14)
+  // Facts from the student's own material, with the file they came from (Sources are labelled)
   const materialFacts = findings.materialFacts ?? [];
   if (materialFacts.length) {
     lines.push("## 📒 From your material");
@@ -45,7 +45,7 @@ export function formatOutput(
     lines.push("");
   }
 
-  // Where the material and the sources disagree: both sides are shown, never dropped (AC-16)
+  // Where the material and the sources disagree: both sides are shown, never dropped (Contradictions are shown, never silently resolved)
   const contradictions = findings.contradictions ?? [];
   if (contradictions.length) {
     lines.push("## ⚠️ Your material and the sources disagree");

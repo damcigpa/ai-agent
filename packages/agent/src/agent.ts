@@ -226,7 +226,7 @@ export async function chat(userMessage: string): Promise<string> {
 
   // --- Library search ---
   // Done once, here: the hits decide the off-topic override below, and the hub gets them
-  // to answer from the student's own material (AC-12, AC-13).
+  // to answer from the student's own material (The library is searched first / Material-first answers).
   const libraryHits = await searchLibraryFor(userMessage);
 
   const sanitized = sanitizeInput(userMessage);

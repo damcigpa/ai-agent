@@ -1,4 +1,4 @@
-// Verifies specs/material-library/material-library.md — AC-1 to AC-5, AC-7, AC-8.
+// Verifies the material-library spec: Adding material; Material is never overwritten or modified; Listing the library.
 // Real file system in temp folders, no API.
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
@@ -27,7 +27,7 @@ afterEach(() => {
 });
 
 describe("moveInboxToLibrary", () => {
-  it("AC-1: moves files from the inbox into the library, content unchanged", () => {
+  it("Adding material: moves files from the inbox into the library, content unchanged", () => {
     inbox("jegyzet.txt", "Mohács, 1526");
     inbox("oldal1.jpg", "kép");
 
@@ -39,7 +39,7 @@ describe("moveInboxToLibrary", () => {
     expect(readFileSync(join(paths.libraryDir, "jegyzet.txt"), "utf-8")).toBe("Mohács, 1526");
   });
 
-  it("AC-1: creates the library folder if it does not exist yet", () => {
+  it("Adding material: creates the library folder if it does not exist yet", () => {
     rmSync(paths.libraryDir, { recursive: true });
     inbox("a.txt");
 
@@ -47,13 +47,13 @@ describe("moveInboxToLibrary", () => {
     expect(inLibrary()).toEqual(["a.txt"]);
   });
 
-  it("AC-2: accepts the supported types in any letter case", () => {
+  it("Adding material: accepts the supported types in any letter case", () => {
     for (const f of ["a.TXT", "b.md", "c.JPG", "d.jpeg", "e.Png"]) inbox(f);
 
     expect(moveInboxToLibrary(paths).added).toEqual(["a.TXT", "b.md", "c.JPG", "d.jpeg", "e.Png"]);
   });
 
-  it("AC-2: ignores hidden files and .gitkeep — they stay in the inbox and are not reported", () => {
+  it("Adding material: ignores hidden files and .gitkeep — they stay in the inbox and are not reported", () => {
     inbox(".gitkeep", "");
     inbox(".DS_Store");
     inbox("a.txt");
@@ -64,7 +64,7 @@ describe("moveInboxToLibrary", () => {
     expect(inInbox()).toEqual([".DS_Store", ".gitkeep"]);
   });
 
-  it("AC-3: leaves unsupported files and folders in the inbox and reports them", () => {
+  it("Adding material: leaves unsupported files and folders in the inbox and reports them", () => {
     inbox("a.txt");
     inbox("fejezet.pdf");
     mkdirSync(join(paths.inboxDir, "fotok"));
@@ -76,7 +76,7 @@ describe("moveInboxToLibrary", () => {
     expect(inInbox()).toEqual(["fejezet.pdf", "fotok"]);
   });
 
-  it("AC-4: never overwrites — a file with the same name stays in the inbox", () => {
+  it("Material is never overwritten or modified: never overwrites — a file with the same name stays in the inbox", () => {
     library("jegyzet.txt", "eredeti");
     inbox("jegyzet.txt", "új");
 
@@ -87,7 +87,7 @@ describe("moveInboxToLibrary", () => {
     expect(inInbox()).toEqual(["jegyzet.txt"]);
   });
 
-  it("AC-4: treats names differing only in letter case as the same name", () => {
+  it("Material is never overwritten or modified: treats names differing only in letter case as the same name", () => {
     library("oldal1.jpg", "eredeti");
     inbox("Oldal1.JPG", "új");
 
@@ -95,7 +95,7 @@ describe("moveInboxToLibrary", () => {
     expect(inLibrary()).toEqual(["oldal1.jpg"]);
   });
 
-  it("AC-5: reports nothing for an empty or missing inbox", () => {
+  it("Adding material: reports nothing for an empty or missing inbox", () => {
     const empty = { added: [], unsupported: [], duplicates: [], failed: [] };
 
     expect(moveInboxToLibrary(paths)).toEqual(empty);
@@ -103,7 +103,7 @@ describe("moveInboxToLibrary", () => {
     expect(moveInboxToLibrary(paths)).toEqual(empty);
   });
 
-  it("AC-7: leaves existing library files untouched", () => {
+  it("Material is never overwritten or modified: leaves existing library files untouched", () => {
     library("regi.txt", "eredeti");
     inbox("uj.txt");
 
@@ -115,7 +115,7 @@ describe("moveInboxToLibrary", () => {
 });
 
 describe("listLibrary", () => {
-  it("AC-8: lists supported files sorted by name, without hidden files", () => {
+  it("Listing the library: lists supported files sorted by name, without hidden files", () => {
     library("b.txt");
     library("a.jpg");
     library(".DS_Store");
@@ -123,7 +123,7 @@ describe("listLibrary", () => {
     expect(listLibrary(paths)).toEqual(["a.jpg", "b.txt"]);
   });
 
-  it("AC-8: returns an empty list for an empty or missing library", () => {
+  it("Listing the library: returns an empty list for an empty or missing library", () => {
     expect(listLibrary(paths)).toEqual([]);
     rmSync(paths.libraryDir, { recursive: true });
     expect(listLibrary(paths)).toEqual([]);

@@ -1,5 +1,5 @@
 // The text behind the /add and /library commands.
-// Implements specs/material-library/material-library.md — AC-1 to AC-6, AC-8.
+// Implements the material-library spec: Adding material; Material is never overwritten or modified; Processing with progress, per-file failures; Listing the library.
 //
 // agent.ts only routes the command here and prints the returned message.
 // Everything is injectable (paths, store, extraction), so it can be tested without an API.
@@ -37,7 +37,7 @@ function pendingWork({ paths = defaultPaths(), manifestPath = defaultManifestPat
 
 const names = (list: string[]) => list.join(", ");
 
-// AC-1 – AC-6: move the inbox into the library, then index what is new.
+// Adding material / Material is never overwritten or modified / Processing with progress, per-file failures: move the inbox into the library, then index what is new.
 export async function handleAdd(options: AddOptions): Promise<string> {
   const { paths = defaultPaths(), manifestPath = defaultManifestPath() } = options;
 
@@ -47,7 +47,7 @@ export async function handleAdd(options: AddOptions): Promise<string> {
   const inboxHadNothing =
     !moved.added.length && !moved.unsupported.length && !moved.duplicates.length && !moved.failed.length;
 
-  // AC-5: an empty inbox says where to put files
+  // Adding material: an empty inbox says where to put files
   if (inboxHadNothing && !hasPending) {
     return `Nothing to add. Put ${SUPPORTED_HINT} files into inbox/ and run /add again.`;
   }
@@ -81,7 +81,7 @@ export async function handleAdd(options: AddOptions): Promise<string> {
     }
   }
 
-  // AC-3, AC-4: what stayed in the inbox, and why
+  // Adding material / Material is never overwritten or modified: what stayed in the inbox, and why
   if (moved.unsupported.length) {
     lines.push(`⚠️  Not added (unsupported, still in inbox/): ${names(moved.unsupported)} — supported: ${SUPPORTED_HINT}`);
   }
@@ -101,14 +101,14 @@ export interface LibraryEntry {
   indexed: boolean; // false = in the library, but not searchable yet
 }
 
-// AC-8: every library file, and whether it is searchable yet. Used by /library and the web UI.
+// Listing the library: every library file, and whether it is searchable yet. Used by /library and the web UI.
 export function getLibraryStatus(options: CommandOptions = {}): LibraryEntry[] {
   const { paths = defaultPaths() } = options;
   const notIndexed = new Set(pendingWork(options).toProcess);
   return listLibrary(paths).map((name) => ({ name, indexed: !notIndexed.has(name) }));
 }
 
-// AC-8: the /library command.
+// Listing the library: the /library command.
 export function handleLibrary(options: CommandOptions = {}): string {
   const entries = getLibraryStatus(options);
 

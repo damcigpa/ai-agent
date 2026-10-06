@@ -1,5 +1,6 @@
 // Manifest: remembers which library files were processed, and in which version.
-// Implements specs/material-library/material-library.plan.md — TD-4 (serves AC-9, AC-10).
+// Implements the material-library spec: Unchanged material is not processed again; Changes made outside the app are detected.
+// Design (add-material-library): D4.
 // The decision "what needs processing" is a pure function (planSync), so it can be
 // tested without files, APIs or a vector store.
 
@@ -10,7 +11,7 @@ import { dirname, resolve } from "path";
 export interface ManifestEntry {
   sha256: string;            // content hash of the file when it was processed
   extractedText: string;     // text read from the file (kept so photos are never read twice)
-  unreadableParts: string[]; // passages the model could not read (AC-11)
+  unreadableParts: string[]; // passages the model could not read (Text in photos is extracted without guessing)
   chunkCount: number;
   processedAt: string;       // ISO date
 }
@@ -19,8 +20,8 @@ export type Manifest = Record<string, ManifestEntry>; // key: file name in libra
 
 export interface SyncPlan {
   toProcess: string[]; // new or changed files
-  unchanged: string[]; // same hash as in the manifest — no API calls for these (AC-9)
-  removed: string[];   // in the manifest but no longer in library/ (AC-10)
+  unchanged: string[]; // same hash as in the manifest — no API calls for these (Unchanged material is not processed again)
+  removed: string[];   // in the manifest but no longer in library/ (Changes made outside the app are detected)
 }
 
 // Resolved at call time, not at import time, so tests can pass their own path.

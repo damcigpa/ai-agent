@@ -1,7 +1,7 @@
 // Spike for specs/topic-quiz/topic-quiz.plan.md — task T2.
 // Checks, before building on them:
-//   TD-1  Voyage embeddings through LangChain find Hungarian text by meaning
-//   TD-2  LanceDB stores to disk, filters by topic (AC-8) and deletes by file (AC-6)
+//   D1  Voyage embeddings through LangChain find Hungarian text by meaning
+//   D2  LanceDB stores to disk, filters by topic and deletes by file
 // Makes exactly 2 Voyage API requests (fits the 3 requests/minute free-trial limit).
 //
 // Run from packages/agent:  npx tsx spikes/voyageLance.ts
@@ -57,7 +57,7 @@ async function main() {
     const search = async (vector: number[]) =>
       (await table.vectorSearch(vector).where(`topic = ${sql("Mohács")}`).limit(1).toArray())[0];
 
-    console.log("3) Search by meaning, filtered to topic 'Mohács' (TD-1, AC-8)");
+    console.log("3) Search by meaning, filtered to topic 'Mohács' (D1)");
     let passed = 0;
     for (const [i, q] of queries.entries()) {
       const hit = await search(queryVectors[i]);
@@ -67,7 +67,7 @@ async function main() {
       console.log(`         → ${hit?.file}  (distance ${Number(hit?._distance).toFixed(3)})`);
     }
 
-    console.log("4) Delete jegyzet3.txt, search again (AC-6)");
+    console.log("4) Delete jegyzet3.txt, search again (D2)");
     await table.delete(`file = ${sql("jegyzet3.txt")}`);
     const afterDelete = await search(queryVectors[2]);
     const deleteOk = afterDelete?.file !== "jegyzet3.txt";
