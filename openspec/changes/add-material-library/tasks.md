@@ -43,4 +43,4 @@
 ## 7. Migration to OpenSpec
 
 - [x] 7.1 Rewrite the spec references in code headers and test names: replace "specs/material-library/material-library.md - AC-n" and "plan - TD-n" with the requirement names and design decisions of this change
-- [ ] 7.2 Remove the old `packages/agent/specs/` folder (material-library and import specs and plans); the history stays in git and in the archive
+- [x] 7.2 Remove the old `packages/agent/specs/` folder (material-library and import specs and plans); the history stays in git and in the archive

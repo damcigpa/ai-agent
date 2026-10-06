@@ -42,6 +42,10 @@ The agent is a hub-and-spoke research tool: the hub plans steps, spokes search t
 
 **D10. Web app.** The library location comes from `LIBRARY_ROOT` (default `../agent`), so the CLI and the web app share `inbox/`, `library/` and `data/`. The upload route writes into the inbox and runs the same `/add` logic, one operation at a time. The chat route passes a `searchLibrary` built on the same store.
 
+**D11. Folders.** All under `packages/agent`, git-ignored except a `.gitkeep`: `inbox/` (where the student drops files), `library/` (added material, never modified by the app) and `data/` (`manifest.json` and `lancedb/`). Paths are resolved at call time and can be passed in, so tests use temp folders without mocking `process.cwd()`.
+
+**D12. CLI wiring.** `/add` and `/library` sit next to `/import` in the command handling, before input sanitization. A startup sync (detecting changes made outside the app) runs before the first prompt, with progress output; it is not built yet (task 3.2).
+
 ## Risks / Trade-offs
 
 - The coverage judge can be too strict or too lenient; the eval (`evals/material.eval.ts`) measures it with known questions.
