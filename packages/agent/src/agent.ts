@@ -63,7 +63,6 @@ function formatQuestion(q: QuizQuestion, index: number, total: number): string {
     `B) ${q.options.B}`,
     `C) ${q.options.C}`,
     `D) ${q.options.D}`,
-    `\n✅ Correct answer: ${q.correct}) ${q.options[q.correct]}`,
   ].join("\n");
 }
 
