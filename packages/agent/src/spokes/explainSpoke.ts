@@ -79,10 +79,11 @@ export async function explainSpoke(
             role: "user",
             content: `Answer the student's question using only the research findings below.
 
-Question: "${userQuestion}"
+<question>${userQuestion}</question>
 
-Research findings:
+<findings>
 ${JSON.stringify(findings, null, 2)}
+</findings>
 
 ${analysisInstructions}
 

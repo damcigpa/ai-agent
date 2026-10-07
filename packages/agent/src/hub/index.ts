@@ -10,6 +10,7 @@ import { StreamEvent } from "../progress.js";
 import { readScratchpad, resetScratchpad, updateScratchpad } from "../tools/scratchpad.js";
 import { compareWithWeb, judgeMaterial, MaterialJudgement } from "../spokes/librarySpoke.js";
 import type { SearchHit } from "../library/vectorStore.js";
+import { checkBudget } from "../budget.js";
 
 const MAX_TURNS = 10;
 
@@ -65,6 +66,15 @@ export function hub(
   return new ReadableStream<StreamEvent>({
     async start(controller) {
       const enqueue = (event: StreamEvent) => controller.enqueue(event);
+
+      // Daily token budget: checked before any model call, so a runaway loop or a forgotten
+      // session cannot keep spending. Shown as the answer, so the CLI and the web both display it.
+      const budget = checkBudget();
+      if (!budget.ok) {
+        enqueue({ type: "done", data: budget.message });
+        controller.close();
+        return;
+      }
 
       const checkAborted = () => {
         if (signal?.aborted) {

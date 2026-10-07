@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { recordTokens } from "./budget.js";
 
 // --- Types ---
 
@@ -41,6 +42,11 @@ export function trackUsage(usage: Anthropic.Usage): void {
   session.outputTokens += usage.output_tokens;
   session.cacheReadTokens += (usage as any).cache_read_input_tokens ?? 0;
   session.cacheWriteTokens += (usage as any).cache_creation_input_tokens ?? 0;
+
+  // Also counted in the persistent daily budget (budget.ts). Cache reads are cheap and left out.
+  recordTokens(
+    usage.input_tokens + usage.output_tokens + ((usage as any).cache_creation_input_tokens ?? 0),
+  );
 }
 
 // --- Estimate session cost ---

@@ -1,6 +1,12 @@
 import { createError, formatError } from "../errors.js";
+import { isAllowedUrl, sanitizeExternalText } from "../security.js";
 
 export async function fetchPage(url: string): Promise<string> {
+  // Refused before any network request so an injected `fetch_page("http://10.0.0.5/admin")`
+  // cannot reach a private service on the student's machine or network.
+  if (!isAllowedUrl(url)) {
+    return `Could not fetch page at "${url}": only public https URLs are allowed.`;
+  }
   try {
     const response = await fetch(url, {
       headers: {
@@ -36,7 +42,10 @@ export async function fetchPage(url: string): Promise<string> {
         ? text.slice(0, MAX_CHARS) + "\n\n[content truncated...]"
         : text;
 
-    return `Page content from ${url}:\n\n${truncated}`;
+    // Sanitize the fetched text — a page can contain phrases aimed at the model.
+    // The surrounding content is kept so the research step still has what to extract.
+    // The caller wraps the result in <page_content> tags to isolate it from instructions.
+    return `<page_content url="${url}">\n${sanitizeExternalText(truncated)}\n</page_content>`;
   } catch (e) {
     const error = createError(
       "SEARCH_FAILED",

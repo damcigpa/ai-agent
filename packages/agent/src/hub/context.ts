@@ -9,7 +9,10 @@ export function buildSearchContext({
   alreadyFound: ResearchFindings | null;
   missing: string[];
 }): string {
-  const parts = [`Original question: "${userMessage}"`];
+  // The question is wrapped in a tag so that an injected instruction inside it
+  // (and inside any findings from an earlier turn) is recognisable as external
+  // content to the search spoke's prompt.
+  const parts = [`<question>${userMessage}</question>`];
 
   if (alreadyFound) {
     parts.push(`Already found:\n${JSON.stringify(alreadyFound, null, 2)}`);
