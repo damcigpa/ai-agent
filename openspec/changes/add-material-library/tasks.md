@@ -36,8 +36,8 @@
 
 ## 6. Evals
 
-- [ ] 6.1 Add `evals/material.eval.ts`
-- [ ] 6.2 Run the eval and fix what fails
+- [x] 6.1 Add `evals/material.eval.ts`
+- [x] 6.2 Run the eval and fix what fails
 
 
 ## 7. Migration to OpenSpec
