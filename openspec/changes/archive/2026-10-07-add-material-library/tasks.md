@@ -18,7 +18,7 @@
 ## 3. CLI
 
 - [x] 3.1 `/add` and `/library`
-- [ ] 3.2 Startup sync: detect changes made outside the app
+- [x] 3.2 Startup sync: detect changes made outside the app
 
 ## 4. Answers
 
@@ -26,7 +26,7 @@
 - [x] 4.2 Hub material step: full / partial / none routing, targeted web search
 - [x] 4.3 Output format: material section, labelled sources
 - [x] 4.4 Contradiction check after the web search, verdict gated by web confidence
-- [ ] 4.5 Notice when the web research fails
+- [x] 4.5 Notice when the web research fails
 - [x] 4.6 Hub routing tests in the repo
 
 ## 5. Web
