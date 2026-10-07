@@ -11,6 +11,7 @@ import { readAllMaterials, clearMaterials } from "./tools/readMaterial.js";
 import { materialSpoke } from "./spokes/materialSpoke.js";
 export const MODEL_HAIKU = "claude-haiku-4-5-20251001";
 export const MODEL_SONNET = "claude-sonnet-4-6";
+import { rewriteQuestion } from "./spokes/rewriteSpoke.js";
 import { handleAdd, handleLibrary, handleStartupSync } from "./library/commands.js";
 import { openChunkStore, createVoyageEmbedder } from "./library/vectorStore.js";
 
@@ -235,7 +236,13 @@ export async function chat(userMessage: string): Promise<string> {
   // --- Library search ---
   // Done once, here: the hits decide the off-topic override below, and the hub gets them
   // to answer from the student's own material (The library is searched first / Material-first answers).
-  const libraryHits = await searchLibraryFor(userMessage);
+  // A follow-up like "And the third wife?" is first rewritten into a question that stands on its
+  // own (Follow-up questions are made self-contained); the first question of a chat needs no call.
+  const standaloneQuestion = await rewriteQuestion(userMessage, messages, MODEL_HAIKU);
+  if (standaloneQuestion !== userMessage) {
+    console.log(`🔎 Searching your material for: "${standaloneQuestion}"`);
+  }
+  const libraryHits = await searchLibraryFor(standaloneQuestion);
 
   const sanitized = sanitizeInput(userMessage);
   if (!sanitized) {
@@ -261,6 +268,7 @@ export async function chat(userMessage: string): Promise<string> {
   try {
     const stream = hub(applyCache(messages), currentModel, undefined, {
       searchLibrary: async () => libraryHits,
+      standaloneQuestion,
       // The CLI streams the explanation prose as it arrives, so the final formatted
       // output should not repeat it. The web does not stream and leaves this out.
       explanationAlreadyShown: true,

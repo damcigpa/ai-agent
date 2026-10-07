@@ -28,6 +28,10 @@ export interface HubOptions {
   // output leaves out "## Explanation" to avoid showing the same text twice.
   // The web does not stream, so it needs the full output.
   explanationAlreadyShown?: boolean;
+  // The student's question rewritten so it stands on its own ("And the third wife?" →
+  // "Who was Henry VIII's third wife?"). Used to judge the material and compare with the web;
+  // without it the raw message is used.
+  standaloneQuestion?: string;
   // Searches the student's own material (the CLI and the web app each pass their own).
   // Optional: without it the hub works exactly as before.
   searchLibrary?: (question: string) => Promise<SearchHit[]>;
@@ -70,7 +74,7 @@ export function hub(
       // Daily token budget: checked before any model call, so a runaway loop or a forgotten
       // session cannot keep spending. Shown as the answer, so the CLI and the web both display it.
       const budget = checkBudget();
-      if (!budget.ok) {
+      if (budget.ok === false) {
         enqueue({ type: "done", data: budget.message });
         controller.close();
         return;
@@ -88,6 +92,8 @@ export function hub(
           typeof lastContent === "string"
             ? lastContent
             : (lastContent as Anthropic.TextBlockParam[])[0].text;
+
+        const materialQuestion = options.standaloneQuestion || userMessage;
 
         // 1. Read scratchpad
         const scratchpad = readScratchpad();
@@ -131,11 +137,11 @@ export function hub(
 
         if (options.searchLibrary && steps.some(isSearchStep)) {
           checkAborted();
-          const hits = await options.searchLibrary(userMessage).catch(() => [] as SearchHit[]);
+          const hits = await options.searchLibrary(materialQuestion).catch(() => [] as SearchHit[]);
 
           if (hits.length) {
             enqueue({ type: "progress", data: "📒 Checking your material..." });
-            const judgement = await judgeMaterial(userMessage, hits, model, signal);
+            const judgement = await judgeMaterial(materialQuestion, hits, model, signal);
             if (judgement.coverage !== "none") material = judgement; // "none" → unchanged flow (No relevant material changes nothing)
           }
 
@@ -195,7 +201,7 @@ export function hub(
             enqueue({ type: "progress", data: "⚠️  The web search failed — answering from your material only" });
           } else if (material && searchFindings && updatedFindings && isSearchStep(currentStep)) {
             const contradictions = await compareWithWeb(
-              userMessage,
+              materialQuestion,
               material.materialFacts,
               updatedFindings, // the web findings alone, before the material was merged in
               model,
