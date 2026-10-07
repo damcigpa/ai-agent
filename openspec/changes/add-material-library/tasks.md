@@ -11,9 +11,9 @@
 - [x] 2.2 `manifest.ts` with tests: content-hash cache, sync plan
 - [x] 2.3 `extract.ts` with tests: text files and photos
 - [x] 2.4 `vectorStore.ts`: native LanceDB, Voyage embedder
-- [ ] 2.5 `vectorStore.ts` tests
+- [x] 2.5 `vectorStore.ts` tests
 - [x] 2.6 `sync.ts`: extract, split, embed, index, per-file failures
-- [ ] 2.7 `sync.ts` integration tests
+- [x] 2.7 `sync.ts` integration tests
 
 ## 3. CLI
 
@@ -27,7 +27,7 @@
 - [x] 4.3 Output format: material section, labelled sources
 - [x] 4.4 Contradiction check after the web search, verdict gated by web confidence
 - [ ] 4.5 Notice when the web research fails
-- [ ] 4.6 Hub routing tests in the repo
+- [x] 4.6 Hub routing tests in the repo
 
 ## 5. Web
 

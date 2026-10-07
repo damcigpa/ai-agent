@@ -130,15 +130,20 @@ Generate exactly ${questionCount} questions.`,
 
   if (toolUse) {
     const input = toolUse.input as { topic?: unknown; questions?: unknown };
+    const questions = Array.isArray(input.questions) ? input.questions.filter(isValidQuestion) : [];
+    if (questions.length === 0) {
+      // Logged so an empty quiz has a visible cause (cut-off or malformed model output)
+      console.error(formatError(createError("PARSE_FAILED", "quizSpoke", "quizSpoke returned an invalid quiz payload")));
+    }
     return {
       topic: typeof input.topic === "string" ? input.topic : findings.work || "Unknown topic",
-      questions: Array.isArray(input.questions) ? input.questions.filter(isValidQuestion) : [],
+      questions,
     };
   }
 
   const error = createError(
     "PARSE_FAILED",
-    "searchSpoke",
+    "quizSpoke",
     "quizSpoke failed to generate quiz",
   );
   console.error(formatError(error));
