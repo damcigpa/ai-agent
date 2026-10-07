@@ -25,16 +25,16 @@ const tools: Anthropic.Tool[] = [
         keyPoints: {
           type: "array",
           items: { type: "string" },
-          description: "Key points of the explanation",
+          description: "Key points of the explanation, each supported by the research findings. Empty array if the findings do not support any.",
         },
         significance: {
           type: "string",
-          description: "Why this matters historically or literarily",
+          description: "Why this matters historically or literarily, using only facts stated in the research findings. Empty string if the findings do not support a significance — do not invent one.",
         },
         furtherReading: {
           type: "array",
           items: { type: "string" },
-          description: "Topics for further reading",
+          description: "Topics for further reading related to the question. Empty array if none fit.",
         },
       },
       required: ["keyPoints", "significance", "furtherReading"],
@@ -77,16 +77,19 @@ export async function explainSpoke(
         messages: [
           {
             role: "user",
-            content: `Using these research findings, answer the following question.
-First write your answer as plain text — no JSON, no markdown headers.
-Then call submit_explanation with the structured data.
+            content: `Answer the student's question using only the research findings below.
 
 Question: "${userQuestion}"
 
 Research findings:
 ${JSON.stringify(findings, null, 2)}
 
-${analysisInstructions}`,
+${analysisInstructions}
+
+Format reminder:
+- Start your reply directly with the first sentence of the explanation. Do not write a title, a label, a heading, "Plain Text Answer", or any introduction such as "Here is the answer".
+- Write in the language of the question above.
+- After the prose, call submit_explanation with the structured parts. If the findings do not support a significance, pass an empty string.`,
           },
         ],
       },

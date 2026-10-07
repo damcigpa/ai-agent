@@ -12,6 +12,9 @@ export function formatOutput(
   findings: ResearchFindings,
   explanation: Explanation | null,
   userQuestion: string,
+  // When the CLI already streamed the explanation prose to stdout, the final output
+  // skips "## Explanation" so the same text does not appear twice.
+  explanationAlreadyShown: boolean = false,
 ): string {
   const lines = [
     `# ${userQuestion}`,
@@ -20,10 +23,11 @@ export function formatOutput(
     findings.author ? `**Key Figure:** ${findings.author}` : "",
     findings.work ? `**Work/Event:** ${findings.work}` : "",
     "",
-    "## Explanation",
-    explanation?.summary || findings.context,
-    "",
   ];
+
+  if (!explanationAlreadyShown) {
+    lines.push("## Explanation", explanation?.summary || findings.context, "");
+  }
 
   if (explanation?.keyPoints?.length) {
     lines.push("## Key Points");
@@ -93,6 +97,8 @@ export function formatAnalysis(
   analysis: AnalysisFindings,
   explanation: Explanation | null,
   userQuestion: string,
+  // Same purpose as in formatOutput: skip the explanation prose when the CLI streamed it.
+  explanationAlreadyShown: boolean = false,
 ): string {
   const lines = [
     `# ${userQuestion}`,
@@ -106,9 +112,11 @@ export function formatAnalysis(
   ];
 
   if (explanation) {
-    lines.push("## Explanation");
-    lines.push(explanation.summary);
-    lines.push("");
+    if (!explanationAlreadyShown) {
+      lines.push("## Explanation");
+      lines.push(explanation.summary);
+      lines.push("");
+    }
 
     if (explanation.keyPoints?.length) {
       lines.push("## Key Points");

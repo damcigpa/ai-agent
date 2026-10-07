@@ -23,6 +23,10 @@ const emptyFindings: ResearchFindings = {
 };
 
 export interface HubOptions {
+  // The CLI already streamed the explanation prose to stdout, so the final formatted
+  // output leaves out "## Explanation" to avoid showing the same text twice.
+  // The web does not stream, so it needs the full output.
+  explanationAlreadyShown?: boolean;
   // Searches the student's own material (the CLI and the web app each pass their own).
   // Optional: without it the hub works exactly as before.
   searchLibrary?: (question: string) => Promise<SearchHit[]>;
@@ -259,8 +263,8 @@ export function hub(
         }
 
         const finalOutput = analysisFindings
-          ? formatAnalysis(analysisFindings, explanation, userMessage)
-          : formatOutput(searchFindings ?? emptyFindings, explanation, userMessage);
+          ? formatAnalysis(analysisFindings, explanation, userMessage, options.explanationAlreadyShown)
+          : formatOutput(searchFindings ?? emptyFindings, explanation, userMessage, options.explanationAlreadyShown);
 
         enqueue({ type: "done", data: finalOutput });
       } catch (e) {

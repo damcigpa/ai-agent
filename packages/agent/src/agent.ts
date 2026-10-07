@@ -261,6 +261,9 @@ export async function chat(userMessage: string): Promise<string> {
   try {
     const stream = hub(applyCache(messages), currentModel, undefined, {
       searchLibrary: async () => libraryHits,
+      // The CLI streams the explanation prose as it arrives, so the final formatted
+      // output should not repeat it. The web does not stream and leaves this out.
+      explanationAlreadyShown: true,
     });
     const reader = stream.getReader();
 
