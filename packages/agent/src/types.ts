@@ -31,6 +31,8 @@ export interface ResearchFindings {
   materialFacts?: { fact: string; file: string }[];
   // Statements where the material and the web sources disagree (Contradictions are shown, never silently resolved).
   contradictions?: Contradiction[];
+  // The material was used, but the web research meant to supplement it returned nothing (Web research failure).
+  webSupplementFailed?: boolean;
   escalate?: boolean;
   escalateReason?: string;
 }

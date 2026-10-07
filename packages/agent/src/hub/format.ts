@@ -45,6 +45,12 @@ export function formatOutput(
     lines.push("");
   }
 
+  // The web research meant to fill the gaps failed: say so (Web research failure)
+  if (findings.webSupplementFailed) {
+    lines.push("⚠️ The web search failed, so this answer is based on your material only and could not be supplemented.");
+    lines.push("");
+  }
+
   // Where the material and the sources disagree: both sides are shown, never dropped (Contradictions are shown, never silently resolved)
   const contradictions = findings.contradictions ?? [];
   if (contradictions.length) {

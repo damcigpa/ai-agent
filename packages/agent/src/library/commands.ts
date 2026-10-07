@@ -96,6 +96,36 @@ export async function handleAdd(options: AddOptions): Promise<string> {
   return lines.join("\n");
 }
 
+// Changes made outside the app are detected: runs once when the CLI starts.
+// Returns null when the index is already up to date (nothing is printed, no store is opened,
+// no API key is needed). Never throws, so a problem here cannot block the chat from starting.
+export async function handleStartupSync(options: AddOptions): Promise<string | null> {
+  const { paths = defaultPaths(), manifestPath = defaultManifestPath() } = options;
+  try {
+    const pending = pendingWork({ paths, manifestPath });
+    if (pending.toProcess.length === 0 && pending.removed.length === 0) return null;
+
+    const store = await options.getStore();
+    const report = await syncLibrary({
+      store,
+      paths,
+      manifestPath,
+      extract: options.extract,
+      onProgress: options.onProgress,
+    });
+
+    const lines: string[] = [];
+    if (report.processed.length) lines.push(`📚 Library updated: indexed ${report.processed.length} new or changed file(s).`);
+    if (report.removed.length) lines.push(`🗑️  Removed from the index (no longer in the library): ${names(report.removed)}`);
+    for (const { file, reason } of report.failed) {
+      lines.push(`⚠️  Could not process ${file}: ${reason} (retried on the next start or /add)`);
+    }
+    return lines.length ? lines.join("\n") : null;
+  } catch (e) {
+    return `⚠️  Library sync skipped: ${e instanceof Error ? e.message : "unknown error"}. Chat works as usual.`;
+  }
+}
+
 export interface LibraryEntry {
   name: string;
   indexed: boolean; // false = in the library, but not searchable yet

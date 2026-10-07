@@ -159,6 +159,11 @@ async function processFindings(
   // override model's self-reported subject with the known authoritative subject
   findings.subject = subject;
 
+  // The model's tool input is not validated by the API. After failed searches it can submit
+  // `sources` as a plain string; such a value is no list of sources, so it is treated as none.
+  if (!Array.isArray(findings.sources)) findings.sources = [];
+  if (!Array.isArray(findings.keyFacts)) findings.keyFacts = [];
+
   const missingRequired = validateFindings(findings);
   if (missingRequired) {
     console.log(`  ⚠️  Missing required fields: ${missingRequired} — escalating`);

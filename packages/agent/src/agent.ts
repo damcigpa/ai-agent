@@ -11,7 +11,7 @@ import { readAllMaterials, clearMaterials } from "./tools/readMaterial.js";
 import { materialSpoke } from "./spokes/materialSpoke.js";
 export const MODEL_HAIKU = "claude-haiku-4-5-20251001";
 export const MODEL_SONNET = "claude-sonnet-4-6";
-import { handleAdd, handleLibrary } from "./library/commands.js";
+import { handleAdd, handleLibrary, handleStartupSync } from "./library/commands.js";
 import { openChunkStore, createVoyageEmbedder } from "./library/vectorStore.js";
 
 const messages: { role: string; content: string }[] = [];
@@ -32,6 +32,14 @@ async function searchLibraryFor(question: string) {
     libraryDisabled = true;
     return [];
   }
+}
+
+// Called once by the CLI before the first prompt (Changes made outside the app are detected).
+export async function syncLibraryOnStartup(): Promise<string | null> {
+  return handleStartupSync({
+    getStore: async () => (chunkStore ??= openChunkStore(await createVoyageEmbedder())),
+    onProgress: (m) => console.log(`  · ${m}`),
+  });
 }
 
 // --- Quiz session state ---

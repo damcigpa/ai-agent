@@ -170,7 +170,16 @@ export function hub(
 
           // Contradictions are shown, never silently resolved: after a web search, compare the material with what the web found
           // (only with partial coverage: full coverage has no web search to compare with)
-          if (material && searchFindings && updatedFindings && isSearchStep(currentStep)) {
+          // Web research failure: the search returned no source (the model may still write text from memory), so the answer stays on the
+          // material alone and says so; there is nothing to compare either.
+          // A real web result has at least one link; after failed searches the model may still list made-up
+          // "sources" such as "Tudor dynasty documentation", which are not links.
+          const webFound = !!updatedFindings && updatedFindings.sources.some((src) => /^https?:\/\//i.test(src));
+          if (material && searchFindings && isSearchStep(currentStep) && !webFound) {
+            // Text the model wrote without any source is dropped: only the material is used.
+            searchFindings = { ...withMaterial(null, material, subject)!, webSupplementFailed: true };
+            enqueue({ type: "progress", data: "⚠️  The web search failed — answering from your material only" });
+          } else if (material && searchFindings && updatedFindings && isSearchStep(currentStep)) {
             const contradictions = await compareWithWeb(
               userMessage,
               material.materialFacts,

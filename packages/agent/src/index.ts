@@ -1,6 +1,6 @@
 import "dotenv/config";
 import * as readline from "readline";
-import { chat } from "./agent.js";
+import { chat, syncLibraryOnStartup } from "./agent.js";
 
 async function main() {
   const rl = readline.createInterface({
@@ -11,6 +11,9 @@ async function main() {
   console.log("Chat with Claude (type 'exit' to quit)");
   console.log("Model commands: 'use sonnet' | 'use haiku' (default: haiku)");
   console.log("Quiz: type /quiz after researching a topic\n");
+
+  const syncMessage = await syncLibraryOnStartup();
+  if (syncMessage) console.log(`${syncMessage}\n`);
 
   const askQuestion = () => {
     rl.question("You: ", async (input) => {

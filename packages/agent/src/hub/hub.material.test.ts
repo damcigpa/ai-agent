@@ -22,11 +22,15 @@ const web = { author: "", work: "Tanácsköztársaság", date: "1919", context: 
 const facts = [{ fact: "1919. március 21-én kikiáltották a Tanácsköztársaságot.", file: "1000003153.jpg" }];
 const hits = [{ text: "jegyzet", file: "1000003153.jpg", chunkIndex: 0, sourceKind: "image", distance: 1.3 }];
 
-// fake executeStep: search returns web findings; explain returns an explanation built from what it got
+// What the fake web search returns; a test can switch it to a failed (empty) search.
+const failedWeb = { author: "", work: "", date: "", context: "", confidence: "low", sources: [], subject: "history", keyFacts: [] };
+let webResult: any = web;
+
+// fake executeStep: search returns webResult; explain returns an explanation built from what it got
 m.step.mockImplementation(async (step: string, _q: string, _s: string, found: any) => {
   const s = step.toLowerCase();
   if (s.includes("explain")) return { result: "", updatedFindings: found, updatedAnalysis: null, updatedExplanation: { summary: `Magyarázat ebből: ${found?.context}`, keyPoints: [], significance: "", furtherReading: [] } };
-  return { result: "", updatedFindings: web, updatedAnalysis: null, updatedExplanation: null };
+  return { result: "", updatedFindings: webResult, updatedAnalysis: null, updatedExplanation: null };
 });
 
 async function run(opts?: any, steps = ["search for information about: q", "explain the findings clearly"], newTopic = true) {
@@ -39,7 +43,7 @@ async function run(opts?: any, steps = ["search for information about: q", "expl
   return { events, done: events.find((e) => e.type === "done")?.data as string, stepsRun, gapsPassed, progress: events.filter((e) => e.type === "progress").map((e) => e.data) };
 }
 
-beforeEach(() => { m.plan.mockReset(); m.replan.mockReset(); m.judge.mockReset(); m.compare.mockReset(); m.compare.mockResolvedValue([]); m.step.mockClear(); m.pad.value = null; vi.spyOn(console, "warn").mockImplementation(() => {}); vi.spyOn(console, "error").mockImplementation(() => {}); });
+beforeEach(() => { m.plan.mockReset(); m.replan.mockReset(); m.judge.mockReset(); m.compare.mockReset(); m.compare.mockResolvedValue([]); m.step.mockClear(); m.pad.value = null; webResult = web; vi.spyOn(console, "warn").mockImplementation(() => {}); vi.spyOn(console, "error").mockImplementation(() => {}); });
 
 describe("hub material step", () => {
   it("no searchLibrary: exactly the old flow", async () => {
@@ -141,5 +145,33 @@ describe("hub material step", () => {
     m.judge.mockResolvedValueOnce({ coverage: "partial", materialFacts: facts, missing: ["x"] });
     const r = await run({ searchLibrary: async () => hits });
     expect(r.done).not.toContain("⚠️");
+  });
+  it("Web research failure: partial coverage and a failed web search answer from the material and say so", async () => {
+    m.judge.mockResolvedValueOnce({ coverage: "partial", materialFacts: facts, missing: ["a bukás oka"] });
+    webResult = failedWeb;
+    const r = await run({ searchLibrary: async () => hits });
+    expect(r.progress).toContain("⚠️  The web search failed — answering from your material only");
+    expect(r.done).toContain("The web search failed, so this answer is based on your material only");
+    expect(r.done).toContain("## 📒 From your material");
+    expect(r.done).toContain("Magyarázat ebből: 1919. március 21-én kikiáltották"); // explained from the material
+    expect(m.compare).not.toHaveBeenCalled(); // nothing to compare with
+    expect(m.pad.value.findings.at(-1).webSupplementFailed).toBe(true);
+  });
+  it("Web research failure: text written from memory without any source counts as a failed search and is not used", async () => {
+    m.judge.mockResolvedValueOnce({ coverage: "partial", materialFacts: facts, missing: ["x"] });
+    webResult = { ...web, context: "memóriából írt szöveg", sources: [] };
+    const r = await run({ searchLibrary: async () => hits });
+    expect(r.done).toContain("The web search failed, so this answer is based on your material only");
+    expect(r.done).not.toContain("memóriából írt szöveg");
+  });
+  it("Web research failure: no notice when the web search works", async () => {
+    m.judge.mockResolvedValueOnce({ coverage: "partial", materialFacts: facts, missing: ["x"] });
+    const r = await run({ searchLibrary: async () => hits });
+    expect(r.done).not.toContain("The web search failed");
+  });
+  it("Web research failure: no notice without material (the old flow is unchanged)", async () => {
+    webResult = failedWeb;
+    const r = await run(undefined);
+    expect(r.done).not.toContain("The web search failed");
   });
 });
