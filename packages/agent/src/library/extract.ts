@@ -11,6 +11,7 @@ import { basename, extname } from "path";
 import { client } from "../client.js";
 import { trackUsage } from "../tokenTracker.js";
 import { createError, formatError } from "../errors.js";
+import { TEMPERATURE } from "../sampling.js";
 
 export const UNREADABLE_MARKER = "[olvashatatlan]";
 
@@ -76,6 +77,7 @@ export async function extractText(
         {
           model,
           max_tokens: 4096,
+          temperature: TEMPERATURE.extract,
           system: SYSTEM_PROMPT,
           tools,
           tool_choice: { type: "tool", name: "submit_transcription" },

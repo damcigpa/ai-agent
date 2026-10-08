@@ -3,6 +3,7 @@ import { client } from "./client.js";
 import { PROMPTS } from "./prompts.js";
 import { trackUsage } from "./tokenTracker.js";
 import { createError, formatError } from "./errors.js";
+import { TEMPERATURE } from "./sampling.js";
 
 export interface ClassificationResult {
   verdict: "safe" | "suspicious";
@@ -46,6 +47,7 @@ export async function classifyInput(
     const response = await client.messages.create({
       model,
       max_tokens: 200,
+      temperature: TEMPERATURE.classify,
       system: [
         {
           type: "text",

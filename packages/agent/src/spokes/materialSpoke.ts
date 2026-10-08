@@ -5,6 +5,7 @@ import { PROMPTS } from "../prompts.js";
 import { trackUsage } from "../tokenTracker.js";
 import { createError, formatError } from "../errors.js";
 import { NamedMaterial } from "../tools/readMaterial.js";
+import { TEMPERATURE } from "../sampling.js";
 
 const tools: Anthropic.Tool[] = [
   {
@@ -84,6 +85,7 @@ export async function materialSpoke(
     const response = await client.messages.create({
       model,
       max_tokens: 1024,
+      temperature: TEMPERATURE.extract,
       system: [
         {
           type: "text",

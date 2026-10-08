@@ -7,6 +7,7 @@ import { LiteratureSubject, ResearchFindings, Subject } from "../types.js";
 import { PROMPTS } from "../prompts.js";
 import { trackUsage } from "../tokenTracker.js";
 import { progressEvent, StreamEvent } from "../progress.js";
+import { TEMPERATURE } from "../sampling.js";
 
 const MAX_TURNS = 4;
 const MAX_FETCHES = 2;
@@ -203,6 +204,7 @@ If search snippets are too short, use fetch_page on the single most promising UR
         {
           model,
           max_tokens: 1024,
+          temperature: TEMPERATURE.search,
           system: [
             {
               type: "text",

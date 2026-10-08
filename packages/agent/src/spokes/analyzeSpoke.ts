@@ -5,6 +5,7 @@ import { fetchPage } from "../tools/fetchPage.js";
 import { createError, formatError } from "../errors.js";
 import { PROMPTS } from "../prompts.js";
 import { trackUsage } from "../tokenTracker.js";
+import { TEMPERATURE } from "../sampling.js";
 
 const MAX_TURNS = 5;
 
@@ -106,6 +107,7 @@ When you have enough information, submit your analysis using the submit_analysis
         {
           model,
           max_tokens: 2048,
+          temperature: TEMPERATURE.analyze,
           system: [
             {
               type: "text",

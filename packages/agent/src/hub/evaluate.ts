@@ -3,6 +3,7 @@ import { client } from "../client.js";
 import { ResearchFindings } from "../types.js";
 import { AnalysisFindings } from "../spokes/analyzeSpoke.js";
 import { trackUsage } from "../tokenTracker.js";
+import { TEMPERATURE } from "../sampling.js";
 
 export interface CoverageResult {
   complete: boolean;
@@ -39,6 +40,7 @@ export async function needsSimplification(
   const response = await client.messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 50,
+    temperature: TEMPERATURE.decide,
     messages: [
       {
         role: "user",

@@ -12,6 +12,7 @@ import { trackUsage } from "../tokenTracker.js";
 import { sanitizeExternalText } from "../security.js";
 import type { SearchHit } from "../library/vectorStore.js";
 import type { Contradiction, ResearchFindings } from "../types.js";
+import { TEMPERATURE } from "../sampling.js";
 
 // Keeps a file name safe to use as an XML attribute value.
 function escapeAttr(s: string): string {
@@ -99,6 +100,7 @@ export async function judgeMaterial(
       {
         model,
         max_tokens: 2048,
+        temperature: TEMPERATURE.judge,
         system: SYSTEM_PROMPT,
         tools,
         tool_choice: { type: "tool", name: "judge_material" },
@@ -231,6 +233,7 @@ export async function compareWithWeb(
       {
         model,
         max_tokens: 1500,
+        temperature: TEMPERATURE.compare,
         system: COMPARE_PROMPT,
         tools: compareTools,
         tool_choice: { type: "tool", name: "report_contradictions" },

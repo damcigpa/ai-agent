@@ -4,6 +4,7 @@ import { ResearchFindings } from "../types.js";
 import { PROMPTS } from "../prompts.js";
 import { trackUsage } from "../tokenTracker.js";
 import { createError, formatError } from "../errors.js";
+import { TEMPERATURE } from "../sampling.js";
 
 export interface QuizQuestion {
   question: string;
@@ -85,6 +86,7 @@ export async function quizSpoke(
   const response = await client.messages.create({
     model,
     max_tokens: 4096,
+    temperature: TEMPERATURE.quiz,
     system: [
       {
         type: "text",

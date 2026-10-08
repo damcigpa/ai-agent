@@ -3,6 +3,7 @@ import { client } from "../client.js";
 import { ResearchFindings, Subject } from "../types.js";
 import { PROMPTS } from "../prompts.js";
 import { trackUsage } from "../tokenTracker.js";
+import { TEMPERATURE } from "../sampling.js";
 
 export async function detectSubjectAndDecompose(
   userMessage: string,
@@ -55,6 +56,7 @@ export async function detectSubjectAndDecompose(
   const response = await client.messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 512,
+    temperature: TEMPERATURE.plan,
     system: [
       {
         type: "text",
@@ -141,6 +143,7 @@ export async function replan(
   const response = await client.messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 128,
+    temperature: TEMPERATURE.replan,
     system: [
       {
         type: "text",

@@ -13,6 +13,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { client } from "../client.js";
 import { trackUsage } from "../tokenTracker.js";
 import { sanitizeExternalText } from "../security.js";
+import { TEMPERATURE } from "../sampling.js";
 
 const MAX_HISTORY_MESSAGES = 4; // the last two exchanges are enough to resolve "he", "that", "the third"
 const MAX_CHARS_PER_MESSAGE = 500; // earlier answers are long formatted text; the start names the topic
@@ -64,6 +65,7 @@ export async function rewriteQuestion(
       {
         model,
         max_tokens: 200,
+        temperature: TEMPERATURE.rewrite,
         system: SYSTEM_PROMPT,
         tools,
         tool_choice: { type: "tool", name: "standalone_question" },

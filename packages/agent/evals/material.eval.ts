@@ -1,5 +1,5 @@
 // Eval: does the material layer behave well with REAL models?
-// Verifies the material-answers spec (tasks 6.1–6.2 of add-material-library): Material-first answers; Nothing is wrongly attributed to the material; Contradictions are shown, never silently resolved; No relevant material changes nothing.
+// Verifies the material-answers spec (tasks 6.1–6.2 of add-material-library) and query rewriting (Follow-up questions are made self-contained): Material-first answers; Nothing is wrongly attributed to the material; Contradictions are shown, never silently resolved; No relevant material changes nothing.
 //
 // Unlike the unit tests (fake model answers), this calls Voyage and Claude for real, so it
 // measures the models' decisions: is the right note found, is coverage judged correctly,
@@ -17,6 +17,7 @@ import { join } from "path";
 import { createVoyageEmbedder, openChunkStore } from "../src/library/vectorStore.js";
 import { syncLibrary } from "../src/library/sync.js";
 import { compareWithWeb, judgeMaterial, type MaterialJudgement } from "../src/spokes/librarySpoke.js";
+import { rewriteQuestion, type HistoryMessage } from "../src/spokes/rewriteSpoke.js";
 import type { ResearchFindings } from "../src/types.js";
 
 const RUNS = Number(process.env.EVAL_RUNS ?? 3);
@@ -92,6 +93,53 @@ const COVERAGE_CASES: CoverageCase[] = [
   },
 ];
 
+// --- Follow-up cases (Follow-up questions are made self-contained): rewrite → search → judge ---
+
+const WIVES_HISTORY: HistoryMessage[] = [
+  { role: "user", content: "Kik voltak VIII. Henrik feleségei?" },
+  { role: "assistant", content: "VIII. Henrik hat felesége: Aragóniai Katalin, Boleyn Anna, Jane Seymour, Klevei Anna, Howard Katalin és Parr Katalin." },
+];
+
+interface FollowUpCase {
+  name: string;
+  history: HistoryMessage[];
+  question: string;
+  mustMatch?: RegExp; // the rewritten question must match (the missing subject was filled in)
+  mustNotMatch?: RegExp; // ... and must not match (a topic switch must not drag the old topic along)
+  acceptable: Coverage[];
+  expectFile?: string;
+}
+
+const FOLLOWUP_CASES: FollowUpCase[] = [
+  {
+    name: "follow-up — \"És a harmadik?\" gets its subject back",
+    history: WIVES_HISTORY,
+    question: "És a harmadik?",
+    // either the king or the person the "third" refers to fills in the missing subject
+    mustMatch: /henrik|henry|seymour/i,
+    acceptable: ["full", "partial"],
+    expectFile: "henry_viii.txt",
+  },
+  {
+    name: "follow-up — \"he\" is resolved (English)",
+    history: [
+      { role: "user", content: "Why did Henry VIII break with the Catholic Church?" },
+      { role: "assistant", content: "Henry wanted a male heir and the Pope refused to annul his marriage to Catherine of Aragon." },
+    ],
+    question: "What did he do about it?",
+    mustMatch: /henry/i,
+    acceptable: ["full", "partial"],
+    expectFile: "henry_viii.txt",
+  },
+  {
+    name: "topic switch — the old topic is not dragged along",
+    history: WIVES_HISTORY,
+    question: "Mikor volt a mohácsi csata?",
+    mustNotMatch: /henrik|henry|feleség/i,
+    acceptable: ["none"],
+  },
+];
+
 // --- Contradiction cases (Contradictions are shown, never silently resolved), against a fixed trusted source ---
 
 interface ContradictionCase {
@@ -157,7 +205,7 @@ export async function main(): Promise<{ passed: number; total: number }> {
   for (const [name, text] of Object.entries(NOTES)) writeFileSync(join(paths.libraryDir, name), text);
 
   let passedCases = 0;
-  const total = COVERAGE_CASES.length + CONTRADICTION_CASES.length;
+  const total = COVERAGE_CASES.length + FOLLOWUP_CASES.length + CONTRADICTION_CASES.length;
 
   try {
     const store = openChunkStore(await createVoyageEmbedder(), join(root, "lancedb"));
@@ -192,6 +240,40 @@ export async function main(): Promise<{ passed: number; total: number }> {
 
       if (ok === RUNS) passedCases++;
       console.log(`${ok === RUNS ? "✅" : "❌"} ${rate(ok)}  ${c.name}   [${seen.join(", ")}]`);
+      [...new Set(failures)].forEach((f) => console.log(`        - ${f}`));
+    }
+
+    for (const c of FOLLOWUP_CASES) {
+      const failures: string[] = [];
+      let ok = 0;
+      const seen: string[] = [];
+      let lastRewrite = c.question;
+
+      // For comparison only (no pass/fail): what would the judge say about the raw follow-up?
+      // (Retrieval alone cannot show the difference here: the sample library is so small that
+      // the top 5 contain every note either way, so the judge's verdict is what is compared.)
+      const rawHits = await store.search(c.question, 5);
+      const rawVerdict = (await quietly(() => judgeMaterial(c.question, rawHits, MODEL))).coverage;
+
+      for (let run = 0; run < RUNS; run++) {
+        const rewritten = await quietly(() => rewriteQuestion(c.question, c.history, MODEL));
+        lastRewrite = rewritten;
+        const hits = await store.search(rewritten, 5);
+        const j = await quietly(() => judgeMaterial(rewritten, hits, MODEL));
+        seen.push(j.coverage);
+        const problems: string[] = [];
+        if (c.mustMatch && !c.mustMatch.test(rewritten)) problems.push(`rewritten question lacks the subject: "${rewritten}"`);
+        if (c.mustNotMatch && c.mustNotMatch.test(rewritten)) problems.push(`old topic dragged along: "${rewritten}"`);
+        if (c.expectFile && !hits.some((h) => h.file === c.expectFile)) problems.push(`retrieval: ${c.expectFile} not among the hits for "${rewritten}"`);
+        if (!c.acceptable.includes(j.coverage)) problems.push(`coverage ${j.coverage}, expected ${c.acceptable.join("/")}`);
+        if (problems.length === 0) ok++;
+        else failures.push(...problems);
+      }
+
+      if (ok === RUNS) passedCases++;
+      console.log(`${ok === RUNS ? "✅" : "❌"} ${rate(ok)}  ${c.name}   [${seen.join(", ")}]`);
+      console.log(`        "${c.question}" → "${lastRewrite}"`);
+      console.log(`        without rewriting the judge says: ${rawVerdict}`);
       [...new Set(failures)].forEach((f) => console.log(`        - ${f}`));
     }
 

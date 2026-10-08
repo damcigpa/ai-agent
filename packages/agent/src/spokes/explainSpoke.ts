@@ -5,6 +5,7 @@ import { ResearchFindings } from "../types.js";
 import { PROMPTS } from "../prompts.js";
 import { trackUsage } from "../tokenTracker.js";
 import { StreamEvent } from "../progress.js";
+import { TEMPERATURE } from "../sampling.js";
 
 const MAX_TURNS = 3;
 
@@ -65,6 +66,7 @@ export async function explainSpoke(
       {
         model,
         max_tokens: 2048,
+        temperature: TEMPERATURE.explain,
         system: [
           {
             type: "text",
