@@ -16,6 +16,9 @@ export interface Contradiction {
   web: string; // what the web sources say
   likelyCorrect: "material" | "web" | "unclear"; // "unclear" unless the web research was highly confident
   reason: string;
+  // How confident the web research behind the "web" side was (shown next to it). Optional so
+  // contradictions saved in an older scratchpad still load.
+  webConfidence?: "high" | "medium" | "low";
 }
 
 export interface ResearchFindings {

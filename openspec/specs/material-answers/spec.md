@@ -82,3 +82,26 @@ If web research fails, the agent SHALL answer from the material alone and SHALL 
 #### Scenario: Quiz after a material-based answer
 - **WHEN** the student runs `/quiz` after an answer that used their material
 - **THEN** the quiz questions can cover the facts from the material
+
+## Verification
+
+How each requirement of this capability is checked:
+
+| What | Where | Uses a real model |
+|---|---|---|
+| The judge's coverage verdict (full / partial / none), retrieval, cross-language questions | `evals/material.eval.ts` | yes |
+| A contradiction between the material and the sources is found; no false alarm when they agree | `evals/material.eval.ts` | yes |
+| The written explanation names both versions of a contested fact, and invents no disagreement where there is none | `evals/material.eval.ts` | yes |
+| Follow-up questions are made self-contained before the material is searched | `evals/material.eval.ts` | yes |
+| The contradiction block: both sides, the reliability of each, the verdict, and its place above the explanation | `src/hub/format.test.ts` | no |
+| The uncertainty notice for low and medium research confidence | `src/hub/format.test.ts` | no |
+| The hub's routing: partial coverage → web search → comparison → the block appears; full coverage → no web search | `src/hub/hub.material.test.ts` | no |
+
+Not covered automatically: the real web search. The eval compares the material against a fixed
+"trusted source" text so that every run gets the same input. That a live search actually returns
+the contradicting fact is only shown by running the agent by hand:
+
+1. Put a note with a known error into `library/` (for example "Elizabeth became queen in 1565").
+2. Ask a question the note answers only in part ("When did Elizabeth I become queen and how long did she reign?"),
+   so the gap triggers a web search and there is something to compare.
+3. The answer must open with the `⚠️ CONTRADICTION` block, and the explanation must name both years.

@@ -8,6 +8,47 @@ const VERDICT: Record<Contradiction["likelyCorrect"], string> = {
   unclear: "Unclear — please check your notes",
 };
 
+const CONFIDENCE: Record<"high" | "medium" | "low", string> = {
+  high: "high — several sources agree",
+  medium: "medium — not fully confirmed",
+  low: "low — little or conflicting information",
+};
+
+// Where the material and the sources disagree, the student must see it before anything else in
+// the final output: both sides, how reliable each is, and the verdict (Contradictions are shown,
+// never silently resolved). The material side has no confidence score: the agent cannot check
+// the notes, it can only compare them, so they are shown exactly as written.
+export function contradictionBlock(contradictions: Contradiction[]): string[] {
+  if (contradictions.length === 0) return [];
+  const lines = [
+    `## ⚠️ CONTRADICTION — your material and the sources disagree (${contradictions.length})`,
+    "",
+  ];
+  contradictions.forEach((c, i) => {
+    if (contradictions.length > 1) lines.push(`**${i + 1}.**`);
+    lines.push(`- 📒 **Your material** (${c.file}): ${c.material}`);
+    lines.push(`  - Reliability: as written in your notes — the agent cannot check it, only compare it`);
+    lines.push(`- 🌐 **The sources**: ${c.web}`);
+    lines.push(`  - Reliability: ${c.webConfidence ? CONFIDENCE[c.webConfidence] : "unknown"}`);
+    lines.push(`- → **${VERDICT[c.likelyCorrect]}**${c.reason ? ` — ${c.reason}` : ""}`);
+    lines.push("");
+  });
+  return lines;
+}
+
+// The research confidence is the model's own estimate, but the student should still see when the
+// answer is shaky: a confident-looking answer on weak sources is worse than a visible warning.
+// "high" shows nothing; "medium" is a gentle hint; "low" is a clear warning.
+export function uncertaintyNotice(confidence: "high" | "medium" | "low" | undefined): string | null {
+  if (confidence === "low") {
+    return "⚠️ I am not sure about this answer: I found little or conflicting information. Please check it in your textbook or notes before you rely on it.";
+  }
+  if (confidence === "medium") {
+    return "ℹ️ This answer is not fully confirmed by several sources — it is worth checking in your textbook.";
+  }
+  return null;
+}
+
 export function formatOutput(
   findings: ResearchFindings,
   explanation: Explanation | null,
@@ -24,6 +65,12 @@ export function formatOutput(
     findings.work ? `**Work/Event:** ${findings.work}` : "",
     "",
   ];
+
+  // Shown first (after the header): a disagreement matters more than anything below it.
+  lines.push(...contradictionBlock(findings.contradictions ?? []));
+
+  const notice = uncertaintyNotice(findings.confidence);
+  if (notice) lines.push(notice, "");
 
   if (!explanationAlreadyShown) {
     lines.push("## Explanation", explanation?.summary || findings.context, "");
@@ -52,18 +99,6 @@ export function formatOutput(
   // The web research meant to fill the gaps failed: say so (Web research failure)
   if (findings.webSupplementFailed) {
     lines.push("⚠️ The web search failed, so this answer is based on your material only and could not be supplemented.");
-    lines.push("");
-  }
-
-  // Where the material and the sources disagree: both sides are shown, never dropped (Contradictions are shown, never silently resolved)
-  const contradictions = findings.contradictions ?? [];
-  if (contradictions.length) {
-    lines.push("## ⚠️ Your material and the sources disagree");
-    contradictions.forEach((c) => {
-      lines.push(`- 📒 Your material: ${c.material} (${c.file})`);
-      lines.push(`  - 🌐 Sources: ${c.web}`);
-      lines.push(`  - → ${VERDICT[c.likelyCorrect]}${c.reason ? ` — ${c.reason}` : ""}`);
-    });
     lines.push("");
   }
 
@@ -110,6 +145,9 @@ export function formatAnalysis(
     analysis.synopsis || "No synopsis available",
     "",
   ];
+
+  const notice = uncertaintyNotice(analysis.confidence);
+  if (notice) lines.push(notice, "");
 
   if (explanation) {
     if (!explanationAlreadyShown) {

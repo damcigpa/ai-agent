@@ -110,12 +110,6 @@ export function hub(
         // After a reset the scratchpad read above is stale: never write its old findings back.
         const baseScratchpad = newTopic ? null : scratchpad;
 
-        // On a new topic the pre-reset snapshot must not be written back.
-        // This is a snapshot from the start of the request (not a fresh read) so
-        // that multiple steps in one request (e.g. search → explain) overwrite
-        // each other instead of appending the same findings/topic twice.
-        const baseScratchpad = newTopic ? null : scratchpad;
-
         let remainingSteps = steps;
         enqueue({ type: "progress", data: `📚 Subject: ${subject}` });
         enqueue({ type: "progress", data: `📋 Plan: ${steps.join(" → ")}` });
@@ -251,13 +245,8 @@ export function hub(
             updateScratchpad(readScratchpad(), {
               subject,
               topic,
-<<<<<<< Updated upstream
               findings: searchFindings
                 ? [...(baseScratchpad?.findings ?? []), searchFindings]
-=======
-              findings: updatedFindings
-                ? [...(baseScratchpad?.findings ?? []), updatedFindings]
->>>>>>> Stashed changes
                 : baseScratchpad?.findings ?? [],
               analysis: updatedAnalysis
                 ? [...(baseScratchpad?.analysis ?? []), updatedAnalysis]

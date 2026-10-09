@@ -269,6 +269,7 @@ export async function compareWithWeb(
         // Contradictions are shown, never silently resolved: a verdict only when the web research was highly confident
         likelyCorrect: web.confidence === "high" ? verdict : "unclear",
         reason: typeof c.reason === "string" ? c.reason.trim() : "",
+        webConfidence: web.confidence,
       });
     }
 

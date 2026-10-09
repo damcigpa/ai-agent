@@ -128,8 +128,8 @@ describe("hub material step", () => {
     expect(sentWeb.materialFacts).toBeUndefined(); // web only, not merged
     expect(sentWeb.sources).toEqual(["https://britannica.com/x"]);
     expect(r.progress).toContain("⚠️  Your material and the web disagree on 1 point(s)");
-    expect(r.done).toContain("## ⚠️ Your material and the sources disagree");
-    expect(r.done).toContain("The sources are probably right — több forrás");
+    expect(r.done).toContain("## ⚠️ CONTRADICTION — your material and the sources disagree");
+    expect(r.done).toContain("**The sources are probably right** — több forrás");
     expect(m.pad.value.findings.at(-1).contradictions).toHaveLength(1); // kept through the explain step and saved
   });
   it("full coverage → no comparison", async () => {
@@ -173,5 +173,18 @@ describe("hub material step", () => {
     webResult = failedWeb;
     const r = await run(undefined);
     expect(r.done).not.toContain("The web search failed");
+  });
+  it("Follow-up questions are made self-contained: the standalone question is used to search and judge the material", async () => {
+    m.judge.mockResolvedValueOnce({ coverage: "full", materialFacts: facts, missing: [] });
+    const search = vi.fn(async () => hits);
+    await run({ searchLibrary: search, standaloneQuestion: "Ki volt VIII. Henrik harmadik felesége?" });
+    expect(search).toHaveBeenCalledWith("Ki volt VIII. Henrik harmadik felesége?");
+    expect(m.judge.mock.calls[0][0]).toBe("Ki volt VIII. Henrik harmadik felesége?");
+  });
+  it("without a standalone question the raw message is used", async () => {
+    m.judge.mockResolvedValueOnce({ coverage: "full", materialFacts: facts, missing: [] });
+    const search = vi.fn(async () => hits);
+    await run({ searchLibrary: search });
+    expect(search).toHaveBeenCalledWith("Mi volt a Tanácsköztársaság?");
   });
 });
