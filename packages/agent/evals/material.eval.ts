@@ -196,9 +196,25 @@ async function quietly<T>(work: () => Promise<T>): Promise<T> {
 
 const rate = (passed: number) => `${passed}/${RUNS}`;
 
+// --- Result shape (read by evals/report.ts to compare models) ---
+
+export interface CaseResult {
+  name: string;
+  group: "coverage" | "follow-up" | "contradiction";
+  ok: number; // runs that passed
+  runs: number;
+}
+
+export interface EvalSummary {
+  passed: number; // cases that passed every run
+  total: number;
+  cases: CaseResult[];
+}
+
 // --- Main ---
 
-export async function main(): Promise<{ passed: number; total: number }> {
+// `model` defaults to EVAL_MODEL (or Haiku), so running this file alone works as before.
+export async function main(model: string = MODEL): Promise<EvalSummary> {
   const root = mkdtempSync(join(tmpdir(), "material-eval-"));
   const paths = { inboxDir: join(root, "inbox"), libraryDir: join(root, "library") };
   mkdirSync(paths.libraryDir, { recursive: true });
@@ -206,6 +222,7 @@ export async function main(): Promise<{ passed: number; total: number }> {
 
   let passedCases = 0;
   const total = COVERAGE_CASES.length + FOLLOWUP_CASES.length + CONTRADICTION_CASES.length;
+  const cases: CaseResult[] = [];
 
   try {
     const store = openChunkStore(await createVoyageEmbedder(), join(root, "lancedb"));
@@ -214,7 +231,7 @@ export async function main(): Promise<{ passed: number; total: number }> {
     );
     if (report.failed.length) throw new Error(`Indexing failed: ${JSON.stringify(report.failed)}`);
 
-    console.log(`Material eval — ${total} cases × ${RUNS} runs, model ${MODEL}\n`);
+    console.log(`Material eval — ${total} cases × ${RUNS} runs, model ${model}\n`);
 
     for (const c of COVERAGE_CASES) {
       const hits = await store.search(c.question, 5); // retrieval is deterministic: once per case
@@ -227,7 +244,7 @@ export async function main(): Promise<{ passed: number; total: number }> {
 
       const seen: string[] = [];
       for (let run = 0; run < RUNS; run++) {
-        const j = await quietly(() => judgeMaterial(c.question, hits, MODEL));
+        const j = await quietly(() => judgeMaterial(c.question, hits, model));
         seen.push(j.coverage);
         const problems: string[] = [];
         if (!c.acceptable.includes(j.coverage)) problems.push(`coverage ${j.coverage}, expected ${c.acceptable.join("/")}`);
@@ -239,6 +256,7 @@ export async function main(): Promise<{ passed: number; total: number }> {
       }
 
       if (ok === RUNS) passedCases++;
+      cases.push({ name: c.name, group: "coverage", ok, runs: RUNS });
       console.log(`${ok === RUNS ? "✅" : "❌"} ${rate(ok)}  ${c.name}   [${seen.join(", ")}]`);
       [...new Set(failures)].forEach((f) => console.log(`        - ${f}`));
     }
@@ -253,13 +271,13 @@ export async function main(): Promise<{ passed: number; total: number }> {
       // (Retrieval alone cannot show the difference here: the sample library is so small that
       // the top 5 contain every note either way, so the judge's verdict is what is compared.)
       const rawHits = await store.search(c.question, 5);
-      const rawVerdict = (await quietly(() => judgeMaterial(c.question, rawHits, MODEL))).coverage;
+      const rawVerdict = (await quietly(() => judgeMaterial(c.question, rawHits, model))).coverage;
 
       for (let run = 0; run < RUNS; run++) {
-        const rewritten = await quietly(() => rewriteQuestion(c.question, c.history, MODEL));
+        const rewritten = await quietly(() => rewriteQuestion(c.question, c.history, model));
         lastRewrite = rewritten;
         const hits = await store.search(rewritten, 5);
-        const j = await quietly(() => judgeMaterial(rewritten, hits, MODEL));
+        const j = await quietly(() => judgeMaterial(rewritten, hits, model));
         seen.push(j.coverage);
         const problems: string[] = [];
         if (c.mustMatch && !c.mustMatch.test(rewritten)) problems.push(`rewritten question lacks the subject: "${rewritten}"`);
@@ -271,6 +289,7 @@ export async function main(): Promise<{ passed: number; total: number }> {
       }
 
       if (ok === RUNS) passedCases++;
+      cases.push({ name: c.name, group: "follow-up", ok, runs: RUNS });
       console.log(`${ok === RUNS ? "✅" : "❌"} ${rate(ok)}  ${c.name}   [${seen.join(", ")}]`);
       console.log(`        "${c.question}" → "${lastRewrite}"`);
       console.log(`        without rewriting the judge says: ${rawVerdict}`);
@@ -279,7 +298,7 @@ export async function main(): Promise<{ passed: number; total: number }> {
 
     for (const c of CONTRADICTION_CASES) {
       const hits = await store.search(c.question, 5);
-      const judgement = await quietly(() => judgeMaterial(c.question, hits, MODEL));
+      const judgement = await quietly(() => judgeMaterial(c.question, hits, model));
       const failures: string[] = [];
       let ok = 0;
 
@@ -287,7 +306,7 @@ export async function main(): Promise<{ passed: number; total: number }> {
         failures.push("the judge found no material facts, nothing to compare");
       } else {
         for (let run = 0; run < RUNS; run++) {
-          const found = await quietly(() => compareWithWeb(c.question, judgement.materialFacts, c.web, MODEL));
+          const found = await quietly(() => compareWithWeb(c.question, judgement.materialFacts, c.web, model));
           const problems: string[] = [];
           if (c.expectContradiction && found.length === 0) problems.push("contradiction not found");
           if (!c.expectContradiction && found.length > 0) {
@@ -302,12 +321,13 @@ export async function main(): Promise<{ passed: number; total: number }> {
       }
 
       if (ok === RUNS) passedCases++;
+      cases.push({ name: c.name, group: "contradiction", ok, runs: RUNS });
       console.log(`${ok === RUNS ? "✅" : "❌"} ${rate(ok)}  ${c.name}`);
       [...new Set(failures)].forEach((f) => console.log(`        - ${f}`));
     }
 
     console.log(`\n--- ${passedCases}/${total} cases passed every run ---`);
-    return { passed: passedCases, total };
+    return { passed: passedCases, total, cases };
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

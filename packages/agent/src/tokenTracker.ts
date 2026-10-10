@@ -3,7 +3,7 @@ import { recordTokens } from "./budget.js";
 
 // --- Types ---
 
-interface TokenUsage {
+export interface TokenUsage {
   inputTokens: number;
   outputTokens: number;
   cacheReadTokens: number;
@@ -74,6 +74,12 @@ export function getUsageWarning(): string | null {
   }
 
   return null;
+}
+
+// --- Read the session's token counts (used by the eval report to price each model) ---
+
+export function getUsage(): TokenUsage {
+  return { ...session };
 }
 
 // --- Reset session ---
