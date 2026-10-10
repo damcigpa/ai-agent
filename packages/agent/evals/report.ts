@@ -9,7 +9,11 @@
 //             for every model
 //
 // Run from packages/agent:  npx tsx --env-file=.env evals/report.ts
-// Runs per case: EVAL_RUNS (default 3). Cost: a few cents for Haiku, about three times that for Sonnet.
+// Runs per case: EVAL_RUNS (default 3). Measured cost on 2026-10-10 with the first 10 cases and
+// 3 runs: about $0.09 for Haiku and $0.26 for Sonnet, $0.35 in total (about 44 calls per model).
+// With the 16 cases now in the eval (about 64 calls per model) expect about $0.50.
+// EVAL_RUNS=1 cuts it to a third. Commit the report in evals/results/ instead of re-running it
+// for a demo. Each run writes a new file (date and time in the name), so older reports are kept.
 // The tokens also count toward the daily budget in data/budget.json.
 // A Markdown report is written to evals/results/.
 
@@ -137,7 +141,11 @@ async function main(): Promise<void> {
 
   const dir = join(process.cwd(), "evals", "results");
   mkdirSync(dir, { recursive: true });
-  const file = join(dir, `models-${new Date().toISOString().slice(0, 10)}.md`);
+  // Date AND local time in the name, so a second run on the same day never overwrites the first.
+  const now = new Date();
+  const two = (n: number) => String(n).padStart(2, "0");
+  const stamp = `${now.getFullYear()}-${two(now.getMonth() + 1)}-${two(now.getDate())}-${two(now.getHours())}${two(now.getMinutes())}`;
+  const file = join(dir, `models-${stamp}.md`);
   writeFileSync(file, report);
   console.log(`Report written to ${file}`);
 }

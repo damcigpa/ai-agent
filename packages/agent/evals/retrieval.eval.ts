@@ -8,7 +8,8 @@
 //   Recall@3  the right passage is in the top 3
 //   Recall@5  the right passage is in the top 5 (the app passes 5 hits to the judge)
 //   MRR@5     mean of 1/rank — rewards finding it early, 0 if not in the top 5
-// broken down by question type (direct, paraphrase, cross-language, distractor), plus the
+// broken down by question type (direct, paraphrase, cross-language, distractor), separately for
+// short single-topic notes and long multi-topic notes (where a big chunk mixes topics), plus the
 // distances of questions the library does NOT answer, to see whether a distance threshold
 // alone could tell "no relevant material" apart.
 //
@@ -156,13 +157,77 @@ A békeszerződést 1920. június 4-én írták alá a versailles-i Nagy-Trianon
 Területeket kapott Csehszlovákia, Románia, a Szerb–Horvát–Szlovén Királyság és Ausztria is. Sopron és környéke az 1921-es népszavazás után Magyarországnál maradt, ezért nevezik "a leghűségesebb városnak".
 
 A békeszerződés korlátozta a hadsereg létszámát is (legfeljebb 35 000 fő), és jóvátétel fizetésére kötelezte az országot. A két világháború közötti magyar politika egyik fő célja a revízió, vagyis a határok megváltoztatása lett.`,
+
+  // --- Long notes with several topics, like a notebook page photographed for revision ---
+  // The short notes above hold one topic each, so a 1500 chunk is a whole note and a big chunk
+  // costs nothing. These are 1600–2200 characters with 5–6 topics each: a 1500 chunk holds about
+  // three topics, an 800 chunk one or two. A chunk that mixes topics gets one vector for all of
+  // them ("dilution"), which is where small and large chunks should really differ.
+  // Their topics avoid the "none" questions below (no Rákóczi, no first king, no Molnár Ferenc).
+
+  "fuzet_arpad_kor.txt": `Füzet – Árpád-kor, ismétlés a dolgozatra
+
+A honfoglalás
+A magyar törzsek 895 körül Árpád vezetésével keltek át a Kárpátokon. A besenyők támadása elől húzódtak nyugatra, és néhány év alatt az egész Kárpát-medencét birtokba vették. A honfoglaló magyarok félnomád állattartók voltak, a törzsszövetség élén a fejedelem és a gyula állt.
+
+A kalandozások
+A 10. században a magyar seregek rendszeresen portyáztak Európa nyugati és déli részein. Gyors lovas íjászaikkal zsákmányt és adót szereztek, a szomszédos uralkodók gyakran fizettek nekik, hogy elkerüljék a támadást. A nyugati kalandozásoknak az vetett véget, hogy I. Ottó német király 955-ben Augsburg mellett, a Lech-mezőn legyőzte a magyar sereget. A hagyomány szerint a fogságba esett vezéreket, Lehelt és Bulcsút kivégezték.
+
+Géza fejedelem
+Géza felismerte, hogy a magyarság csak akkor maradhat fenn, ha beilleszkedik a keresztény Európába. Békét kötött a német császárral, hittérítőket hívott az országba, és keményen leszámolt a vele szembeszálló törzsfőkkel.
+
+Szent László
+I. László (1077–1095) szigorú törvényeket hozott a magántulajdon védelmére: a tolvajt akár halállal is büntették. Uralkodása alatt kezdődött Horvátország megszerzése. Ő alapította a váradi püspökséget, és ott is temették el. Halála után a lovagkirály eszményképe lett, alakját sok templom falfestménye őrzi.
+
+Könyves Kálmán
+Kálmán (1095–1116) műveltségéről kapta a melléknevét. Enyhítette László kemény törvényeit, és egyik törvénye így szólt: a boszorkányok pedig nincsenek, ezért senkit ne vádoljanak boszorkányságért. Uralkodása alatt Horvátország perszonálunióba került Magyarországgal, a horvát nemesség megtartotta a saját jogait.
+
+II. András és az Aranybulla
+II. András (1205–1235) az "új berendezkedés" jegyében sok királyi birtokot adományozott híveinek. Emiatt csökkentek a király jövedelmei, és a király katonáiként szolgáló serviensek, a későbbi köznemesek elégedetlenek lettek. 1222-ben a király kénytelen volt kiadni az Aranybullát, amely rögzítette a serviensek jogait: például nem lehetett őket ítélet nélkül elfogni, és nem kellett az ország határán túl a saját költségükön harcolniuk. Ha a király megszegi az oklevelet, a nemesek jogosan ellenállhatnak neki: ez az ellenállási záradék.`,
+
+  "fuzet_torok_kor.txt": `Füzet – végvári harcok és a török kiűzése
+
+Eger ostroma (1552)
+1552-ben a török nagy sereggel vonult Eger ellen. A vár védőit Dobó István várkapitány vezette, alig kétezer emberrel a többszörös túlerővel szemben. A védők öt héten át kitartottak; a vár asszonyai is részt vettek a harcban, forró szurkot és köveket zúdítottak az ostromlókra. A török végül eredmény nélkül elvonult. Az ostrom történetét Gárdonyi Géza Egri csillagok című regénye dolgozza fel.
+
+Szigetvár (1566)
+1566-ban I. Szulejmán szultán személyesen vezette a hadjáratot, és Szigetvárt ostromolta. A vár kapitánya Zrínyi Miklós volt. Amikor a várat már nem lehetett tovább tartani, Zrínyi a maradék védőkkel kirohant a török seregre, és a harcban hősi halált halt. A szultán az ostrom idején, a táborában halt meg, halálát napokig titkolták a katonák elől.
+
+A tizenöt éves háború
+1591 és 1606 között újra nagy háború folyt a Habsburgok és a törökök között Magyarország területén. A hadjáratok súlyosan pusztították az országot, a falvakat a zsoldosok fosztogatásai is sújtották.
+
+Bocskai István
+Bocskai István erdélyi nagyúr 1604-ben fegyvert fogott a Habsburg-uralom ellen, mert a császár a protestánsokat üldözte és koholt perekkel vette el a nemesek birtokait. Seregének gerincét a hajdúk adták, akiket később letelepített és nemesi kiváltságokkal jutalmazott meg; így jöttek létre a hajdúvárosok. Az 1606-os bécsi béke biztosította a rendi jogokat és a vallásszabadságot.
+
+Bethlen Gábor
+Bethlen Gábor erdélyi fejedelem (1613–1629) idején volt Erdély aranykora. Fejlesztette a bányászatot és a kereskedelmet, Gyulafehérváron kollégiumot alapított, és tehetséges diákokat küldött külföldi egyetemekre.
+
+Buda visszafoglalása
+A török kiűzése a 17. század végén kezdődött. Bécs sikertelen török ostroma (1683) után megalakult a Szent Liga, a keresztény államok szövetsége. A szövetséges seregek 1686-ban hosszú ostrom után visszafoglalták Budát, amely 145 évig volt török kézen. Néhány éven belül az ország szinte teljes területe felszabadult a török uralom alól.`,
+
+  "fuzet_irodalom.txt": `Füzet – irodalom a végvári költészettől a reformkorig
+
+Balassi Bálint (1554–1594)
+Balassi az első jelentős magyar nyelvű költő. Szerelmes verseit, a Júlia-verseket és vitézi énekeit is anyanyelvén írta. Legismertebb vitézi verse az Egy katonaének, amelyben a végvári katonaélet szépségét és szabadságát dicséri. Esztergom ostrománál sebesült meg halálosan.
+
+Zrínyi Miklós, a költő (1620–1664)
+A szigetvári hős dédunokája. Fő műve a Szigeti veszedelem című eposz (1651), amely dédapja hősi halálát és a vár ostromát dolgozza fel, Isten akaratának beteljesüléseként ábrázolva. Az eposz a török elleni összefogásra buzdít. Zrínyi nemcsak költő, hanem hadvezér és politikus is volt.
+
+Csokonai Vitéz Mihály (1773–1805)
+A felvilágosodás korának debreceni költője. Lilla-verseit Vajda Juliannához írta, akit a lány családja végül máshoz adott feleségül. A Dorottya című vígeposzában a farsangi szokásokon és a régimódi nemeseken gúnyolódik.
+
+Kölcsey Ferenc és a Himnusz
+Kölcsey Ferenc 1823. január 22-én fejezte be a Himnuszt Szatmárcsekén. A vers alcíme: "A magyar nép zivataros századaiból". A költő a magyar történelem csapásait Isten büntetésének látja, és kegyelmet kér a népnek. Erkel Ferenc 1844-ben zenésítette meg. A befejezés napja, január 22. ma a magyar kultúra napja.
+
+Vörösmarty Mihály és a Szózat
+Vörösmarty a reformkor nagy költője, a Zalán futása című eposzával lett híres. A Szózatot 1836-ban írta: a vers arra szólítja a magyarokat, hogy rendületlenül hűek maradjanak hazájukhoz, mert "itt élned, halnod kell". A verset Egressy Béni zenésítette meg, ma a Himnusz mellett a második nemzeti énekünk.`,
 };
 
 // --- Questions, each labelled with the note AND a short passage the right chunk contains ---
 // Labelling the passage (not just the file) matters: "the right file" is too easy when a
 // file has only a couple of chunks. The anchor is short, so it fits in a chunk of any size.
 
-type Category = "direct" | "paraphrase" | "cross-language" | "distractor" | "none";
+type Category = "direct" | "paraphrase" | "cross-language" | "distractor" | "long" | "none";
 
 interface Query {
   question: string;
@@ -201,6 +266,20 @@ const QUERIES: Query[] = [
   { category: "distractor", question: "Mi történt Világosnál 1849-ben?", file: "aradi_vertanuk.txt", anchor: "Világosnál" },
   { category: "distractor", question: "Melyik pályázatra írta Arany a Toldit?", file: "arany_janos.txt", anchor: "Kisfaludy Társaság" },
   { category: "distractor", question: "Mikor esett el Nándorfehérvár a töröknek?", file: "mohacsi_csata.txt", anchor: "1521-ben elesett" },
+
+  // long — the answer is one topic inside a long, multi-topic note (several are also paraphrase,
+  // distractor or cross-language). Reported separately, so the short-note numbers stay comparable.
+  { category: "long", question: "Melyik vereség után hagytak fel a magyarok a nyugati portyákkal?", file: "fuzet_arpad_kor.txt", anchor: "Augsburg mellett" },
+  { category: "long", question: "Melyik uralkodó törvénye mondta ki, hogy a boszorkányok nem léteznek?", file: "fuzet_arpad_kor.txt", anchor: "a boszorkányok pedig nincsenek" },
+  { category: "long", question: "Mit tehettek a nemesek az 1222-es oklevél szerint, ha a király megszegte?", file: "fuzet_arpad_kor.txt", anchor: "ellenállási záradék" },
+  { category: "long", question: "Ki irányította a védekezést, amikor a szultán serege Egert ostromolta?", file: "fuzet_torok_kor.txt", anchor: "Dobó István" },
+  { category: "long", question: "Hogyan halt meg a szigetvári várkapitány?", file: "fuzet_torok_kor.txt", anchor: "kirohant a török seregre" },
+  { category: "long", question: "Kikre támaszkodott Bocskai a Habsburgok elleni harcban?", file: "fuzet_torok_kor.txt", anchor: "a hajdúk adták" },
+  { category: "long", question: "Mikor került vissza Buda keresztény kézre?", file: "fuzet_torok_kor.txt", anchor: "1686-ban hosszú ostrom" },
+  { category: "long", question: "Melyik eposz dolgozza fel a szigetvári ostromot?", file: "fuzet_irodalom.txt", anchor: "Szigeti veszedelem" },
+  { category: "long", question: "Mikor készült el a nemzeti imádság, amelyet ünnepeken énekelünk?", file: "fuzet_irodalom.txt", anchor: "1823. január 22" },
+  { category: "long", question: "Melyik versében dicsérte Balassi a katonaéletet?", file: "fuzet_irodalom.txt", anchor: "Egy katonaének" },
+  { category: "long", question: "Who wrote the poem that tells Hungarians to stay faithful to their homeland?", file: "fuzet_irodalom.txt", anchor: "Szózatot 1836" },
 
   // none — the library does not answer these; only their distances are recorded
   { category: "none", question: "Ki írta A Pál utcai fiúkat?" },
@@ -349,23 +428,29 @@ function buildReport(configs: ConfigResult[]): string {
   lines.push(`${new Date().toISOString().slice(0, 10)} · ${Object.keys(NOTES).length} notes · ${answerableCount} answerable questions + ${noneCount} the library does not answer · top ${K}`);
   lines.push("");
 
-  lines.push("## Chunk size comparison");
-  lines.push("");
-  lines.push("| Chunk size / overlap | Chunks | Hit@1 | Recall@3 | Recall@5 | MRR@5 | Right file in top 5 |");
-  lines.push("|---|---|---|---|---|---|---|");
-  for (const c of configs) {
-    const m = metrics(answerable(c));
-    const mark = c.chunkSize === CURRENT ? " (current)" : "";
-    lines.push(`| ${c.chunkSize} / ${c.chunkOverlap}${mark} | ${c.chunkCount} | ${pct(m.hit1)} | ${pct(m.recall3)} | ${pct(m.recall5)} | ${num(m.mrr)} | ${pct(m.fileRecall5)} |`);
-  }
-  lines.push("");
+  // Two tables: the short single-topic notes (comparable with earlier reports) and the long
+  // multi-topic notes, where a big chunk mixes topics. "Chunks" counts the whole library.
+  const sizeTable = (title: string, pick: (r: QueryResult) => boolean) => {
+    lines.push(title);
+    lines.push("");
+    lines.push("| Chunk size / overlap | Chunks | Questions | Hit@1 | Recall@3 | Recall@5 | MRR@5 | Right file in top 5 |");
+    lines.push("|---|---|---|---|---|---|---|---|");
+    for (const c of configs) {
+      const m = metrics(c.results.filter(pick));
+      const mark = c.chunkSize === CURRENT ? " (current)" : "";
+      lines.push(`| ${c.chunkSize} / ${c.chunkOverlap}${mark} | ${c.chunkCount} | ${m.n} | ${pct(m.hit1)} | ${pct(m.recall3)} | ${pct(m.recall5)} | ${num(m.mrr)} | ${pct(m.fileRecall5)} |`);
+    }
+    lines.push("");
+  };
+  sizeTable("## Chunk size comparison — short, single-topic notes", (r) => r.query.category !== "none" && r.query.category !== "long");
+  sizeTable("## Chunk size comparison — long, multi-topic notes", (r) => r.query.category === "long");
 
   const current = configs.find((c) => c.chunkSize === CURRENT) ?? configs[0];
   lines.push(`## By question type (chunk size ${current.chunkSize})`);
   lines.push("");
   lines.push("| Type | Questions | Hit@1 | Recall@5 | MRR@5 |");
   lines.push("|---|---|---|---|---|");
-  for (const cat of ["direct", "paraphrase", "cross-language", "distractor"] as Category[]) {
+  for (const cat of ["direct", "paraphrase", "cross-language", "distractor", "long"] as Category[]) {
     const m = metrics(current.results.filter((r) => r.query.category === cat));
     lines.push(`| ${cat} | ${m.n} | ${pct(m.hit1)} | ${pct(m.recall5)} | ${num(m.mrr)} |`);
   }
@@ -425,7 +510,11 @@ export async function main(): Promise<void> {
 
   const dir = join(process.cwd(), "evals", "results");
   mkdirSync(dir, { recursive: true });
-  const file = join(dir, `retrieval-${new Date().toISOString().slice(0, 10)}.md`);
+  // Date AND local time in the name, so a second run on the same day never overwrites the first.
+  const now = new Date();
+  const two = (n: number) => String(n).padStart(2, "0");
+  const stamp = `${now.getFullYear()}-${two(now.getMonth() + 1)}-${two(now.getDate())}-${two(now.getHours())}${two(now.getMinutes())}`;
+  const file = join(dir, `retrieval-${stamp}.md`);
   writeFileSync(file, report);
   console.log(`Report written to ${file}`);
 }
