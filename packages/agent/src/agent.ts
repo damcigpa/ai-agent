@@ -14,6 +14,8 @@ export const MODEL_SONNET = "claude-sonnet-4-6";
 import { rewriteQuestion } from "./spokes/rewriteSpoke.js";
 import { handleAdd, handleLibrary, handleStartupSync } from "./library/commands.js";
 import { openChunkStore, createVoyageEmbedder } from "./library/vectorStore.js";
+import { judgeMaterial } from "./spokes/librarySpoke.js";
+import type { ResearchFindings } from "./types.js";
 
 const messages: { role: string; content: string }[] = [];
 let currentModel = MODEL_HAIKU;
@@ -23,11 +25,11 @@ let currentModel = MODEL_HAIKU;
 let chunkStore: Awaited<ReturnType<typeof openChunkStore>> | null = null;
 let libraryDisabled = false;
 
-async function searchLibraryFor(question: string) {
+async function searchLibraryFor(question: string, k: number = 5) {
   if (libraryDisabled) return [];
   try {
     chunkStore ??= openChunkStore(await createVoyageEmbedder());
-    return await chunkStore.search(question, 5);
+    return await chunkStore.search(question, k);
   } catch (e) {
     console.log(`  ⚠️  Library search is off for this session: ${e instanceof Error ? e.message : "unknown error"}`);
     libraryDisabled = true;
@@ -51,9 +53,40 @@ interface QuizSession {
   score: number;
   awaitingAnswer: boolean;
   awaitingCount: boolean;
+  // Set by "/quiz <topic>": the questions come from the student's notes on that topic.
+  // Without it, they come from the last answer (the scratchpad), as before.
+  topicFindings?: ResearchFindings;
 }
 
 let quizSession: QuizSession | null = null;
+
+// How many note chunks a topic quiz is built from: more than a question needs (5),
+// so the quiz has enough facts for several questions.
+const TOPIC_QUIZ_CHUNKS = 8;
+
+// The student's notes on a topic, as findings the quiz can be built from.
+// The vector search always returns its closest chunks, even for a topic the notes never
+// mention, so the material judge decides whether they are really about the topic and
+// keeps only the facts the notes state (each with its file). null = nothing on this topic.
+async function notesOnTopic(topic: string): Promise<ResearchFindings | null> {
+  const hits = await searchLibraryFor(topic, TOPIC_QUIZ_CHUNKS);
+  if (hits.length === 0) return null;
+
+  const judgement = await judgeMaterial(`What do the notes say about ${topic}?`, hits, MODEL_HAIKU);
+  if (judgement.coverage === "none") return null;
+
+  const facts = judgement.materialFacts.map((m) => m.fact);
+  return {
+    author: "",
+    work: topic,
+    date: "",
+    context: facts.join(" "),
+    confidence: "high",
+    sources: [],
+    keyFacts: facts,
+    materialFacts: judgement.materialFacts,
+  };
+}
 
 function formatQuestion(q: QuizQuestion, index: number, total: number): string {
   return [
@@ -131,7 +164,8 @@ export async function chat(userMessage: string): Promise<string> {
     quizSession.awaitingCount = false;
 
     const scratchpad = readScratchpad();
-    const findings = scratchpad?.findings?.[scratchpad.findings.length - 1];
+    const findings =
+      quizSession.topicFindings ?? scratchpad?.findings?.[scratchpad.findings.length - 1];
 
     if (!findings) {
       quizSession = null;
@@ -169,6 +203,34 @@ export async function chat(userMessage: string): Promise<string> {
     } else {
       return "Please answer with A, B, C, or D.";
     }
+  }
+
+  // --- /quiz <topic>: a quiz from the student's own notes on a topic ---
+  const topicQuiz = userMessage.trim().match(/^\/quiz\s+(.+)$/i);
+  if (topicQuiz) {
+    const topic = sanitizeInput(topicQuiz[1].trim());
+    if (!topic) return "I'm sorry, I cannot process that request.";
+
+    console.log(`\n📒 Looking for your notes on "${topic}"...`);
+    const topicFindings = await notesOnTopic(topic);
+    if (!topicFindings) {
+      return `I found nothing about "${topic}" in your notes. Add material with /add, or ask a question and then use /quiz.`;
+    }
+
+    const files = [...new Set((topicFindings.materialFacts ?? []).map((m) => m.file))];
+    quizSession = {
+      quiz: { topic: "", questions: [] },
+      currentIndex: 0,
+      totalQuestions: 0,
+      score: 0,
+      awaitingAnswer: false,
+      awaitingCount: true,
+      topicFindings,
+    };
+    return (
+      `📒 Found ${topicFindings.keyFacts?.length ?? 0} fact(s) about "${topic}" in: ${files.join(", ")}\n` +
+      `How many questions would you like? (1-10, default: 5)`
+    );
   }
 
   // --- /quiz command ---

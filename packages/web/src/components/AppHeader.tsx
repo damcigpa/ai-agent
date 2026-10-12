@@ -12,9 +12,6 @@ function AuthButton() {
   if (session?.user) {
     return (
       <div className="flex items-center gap-3 text-sm">
-        <Link href="/history" className="text-blue-500 hover:underline">
-          History
-        </Link>
         <span className="text-gray-600">{session.user.name}</span>
         <button
           onClick={() => signOut()}
@@ -35,7 +32,17 @@ export function AppHeader() {
     <div className="flex items-center justify-between mb-4">
       <h1 className="text-xl font-semibold">Exam Prep Assistant</h1>
       <div className="flex items-center gap-3">
+        {/* Shown without a login: the app runs as one local user (see auth.ts). */}
+        <nav className="flex items-center gap-3 text-sm">
+          <Link href="/library" className="text-blue-500 hover:underline">
+            Library
+          </Link>
+          <Link href="/history" className="text-blue-500 hover:underline">
+            History
+          </Link>
+        </nav>
         <ModelSelector />
+        {/* Name and "Log out" only appear when real logins are switched back on. */}
         <AuthButton />
       </div>
     </div>

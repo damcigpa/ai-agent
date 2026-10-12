@@ -55,8 +55,10 @@ export function useChat() {
     }
   }
 
+  // The app runs as one local user without a login (see auth.ts), so the history is restored
+  // whenever there is a session id; with real logins it waits until the user is signed in.
   useEffect(() => {
-    if (authStatus !== "authenticated" || !sessionId) return;
+    if (authStatus === "loading" || !sessionId) return;
 
     restoreSessionHistory(sessionId).then((restored) => {
       if (restored && restored.length > 0) setMessages(restored);
@@ -80,11 +82,26 @@ export function useChat() {
   const finalizeLastMessage = (content: string) => {
     setMessages((prev) => {
       const updated = [...prev];
+      const last = updated[updated.length - 1];
       updated[updated.length - 1] = {
         role: "assistant",
         content,
         isStreaming: false,
+        steps: last?.role === "assistant" ? last.steps : undefined, // keep the agent's steps
       };
+      return updated;
+    });
+  };
+
+  // Every progress message is kept on the answer it belongs to, so the student (and a demo
+  // audience) can see afterwards how the agent got there: plan, material check, contradictions.
+  const addStepToLastMessage = (step: string) => {
+    setMessages((prev) => {
+      const updated = [...prev];
+      const last = updated[updated.length - 1];
+      if (last?.role === "assistant") {
+        updated[updated.length - 1] = { ...last, steps: [...(last.steps ?? []), step] };
+      }
       return updated;
     });
   };
@@ -104,6 +121,7 @@ export function useChat() {
     switch (event.type) {
       case "progress":
         setProgress(event.data);
+        addStepToLastMessage(event.data);
         break;
       case "chunk":
         appendToLastMessage(event.data);

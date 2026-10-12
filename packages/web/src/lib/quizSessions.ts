@@ -24,7 +24,7 @@ export interface QuizSessionItem {
 const globalStore = globalThis as typeof globalThis & {
   __quizSessions?: Map<string, QuizSessionItem>;
 };
-const sessions = (globalStore.__quizSessions ??= new Map());
+const sessions = (globalStore.__quizSessions ??= new Map<string, QuizSessionItem>());
 
 function storageKey(sessionId: string, quizId: string): string {
   return JSON.stringify([sessionId, quizId]);

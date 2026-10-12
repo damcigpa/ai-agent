@@ -11,6 +11,7 @@ export interface Message {
   content: string;
   isStreaming?: boolean;
   structure?: MessageStructure;
+  steps?: string[]; // the agent's progress messages while it worked on this answer
 }
 
 export interface StreamEvent {

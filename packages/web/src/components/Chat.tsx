@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { useChat as useChatHook } from "../hooks/useChat";
 import { Message, MessageStructure } from "../types/chat";
 import { QuizPanel } from "./QuizPanel";
+import { AgentSteps, AnswerMarkdown } from "./AnswerMarkdown";
 
 // --- Parts ---
 
@@ -48,11 +49,15 @@ function ChatMessageBubble({ message }: { message: Message }) {
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div
-        className={`max-w-[80%] rounded-2xl px-4 py-3 ${
-          isUser ? "bg-blue-500 text-white" : "bg-gray-100 text-gray-900"
-        }`}
+        className={`max-w-[80%] rounded-2xl px-4 py-3 ${isUser ? "bg-blue-500 text-white" : "bg-gray-100 text-gray-900"
+          }`}
       >
-        <p className="whitespace-pre-wrap">{message.content}</p>
+        {!isUser && <AgentSteps steps={message.steps} working={!!message.isStreaming} />}
+        {isUser ? (
+          <p className="whitespace-pre-wrap">{message.content}</p>
+        ) : (
+          <AnswerMarkdown content={message.content} />
+        )}
         {message.isStreaming && (
           <span className="inline-block w-1 h-4 bg-gray-400 animate-pulse ml-1" />
         )}
@@ -87,13 +92,7 @@ function Messages({
         <ChatMessageBubble key={i} message={msg} />
       ))}
 
-      {progress && (
-        <div className="flex justify-start">
-          <div className="bg-gray-50 border rounded-2xl px-4 py-2 text-sm text-gray-500">
-            {progress}
-          </div>
-        </div>
-      )}
+      {/* Progress is shown inside the answer bubble, as the agent's steps (AgentSteps). */}
 
       <div ref={messagesEndRef} />
     </div>

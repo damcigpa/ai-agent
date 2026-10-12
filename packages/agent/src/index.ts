@@ -10,7 +10,7 @@ async function main() {
 
   console.log("Chat with Claude (type 'exit' to quit)");
   console.log("Model commands: 'use sonnet' | 'use haiku' (default: haiku)");
-  console.log("Quiz: type /quiz after researching a topic\n");
+  console.log("Quiz: /quiz after researching a topic, or /quiz <topic> to be quizzed on your notes\n");
 
   const syncMessage = await syncLibraryOnStartup();
   if (syncMessage) console.log(`${syncMessage}\n`);
