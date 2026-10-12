@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { hub } from "./hub/index.js";
 import { createError, formatError, formatUserError } from "./errors.js";
-import { getUsageWarning } from "./tokenTracker.js";
+import { getUsage, getUsageWarning } from "./tokenTracker.js";
 import { StreamEvent } from "./progress.js";
 import { sanitizeInput } from "./security.js";
 import { quizSpoke, Quiz, QuizQuestion } from "./spokes/quizSpoke.js";
@@ -359,6 +359,14 @@ export async function chat(userMessage: string): Promise<string> {
           console.error(`Error: ${event.data}`);
           break;
       }
+    }
+
+    // Set CACHE_DEBUG=1 to see whether prompt caching actually kicks in (session totals).
+    if (process.env.CACHE_DEBUG === "1") {
+      const u = getUsage();
+      console.log(
+        `[cache] input=${u.inputTokens} output=${u.outputTokens} cache_write=${u.cacheWriteTokens} cache_read=${u.cacheReadTokens}`,
+      );
     }
 
     const warning = getUsageWarning();
