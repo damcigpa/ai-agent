@@ -13,6 +13,7 @@
 // source, a three-part question, an answer that has to be counted from the notes.
 //
 // Run from packages/agent:  npx tsx --env-file=.env evals/material.eval.ts
+// Judge step on another model: EVAL_JUDGE_MODEL=claude-sonnet-4-6 (rest stays on EVAL_MODEL / Haiku).
 // Only some cases: EVAL_ONLY="swapped" runs the cases whose name contains that text (case-insensitive).
 // Cost with Haiku: about 64 calls with 3 runs (~$0.13), about 26 calls with EVAL_RUNS=1 (~$0.05).
 
@@ -301,6 +302,9 @@ export interface EvalSummary {
 
 // `model` defaults to EVAL_MODEL (or Haiku), so running this file alone works as before.
 export async function main(model: string = MODEL): Promise<EvalSummary> {
+  // EVAL_JUDGE_MODEL: a different model for the judge step only (judgeMaterial), everything else
+  // stays on `model`. Tests model routing: is it enough to run the one small step on a stronger model?
+  const judgeModel = process.env.EVAL_JUDGE_MODEL ?? model;
   const root = mkdtempSync(join(tmpdir(), "material-eval-"));
   const paths = { inboxDir: join(root, "inbox"), libraryDir: join(root, "library") };
   mkdirSync(paths.libraryDir, { recursive: true });
@@ -317,7 +321,7 @@ export async function main(model: string = MODEL): Promise<EvalSummary> {
     );
     if (report.failed.length) throw new Error(`Indexing failed: ${JSON.stringify(report.failed)}`);
 
-    console.log(`Material eval — ${total} cases × ${RUNS} runs, model ${model}\n`);
+    console.log(`Material eval — ${total} cases × ${RUNS} runs, model ${model}${judgeModel !== model ? `, judge step on ${judgeModel}` : ""}\n`);
 
     for (const c of selected(COVERAGE_CASES)) {
       const hits = await store.search(c.question, 5); // retrieval is deterministic: once per case
@@ -330,7 +334,7 @@ export async function main(model: string = MODEL): Promise<EvalSummary> {
 
       const seen: string[] = [];
       for (let run = 0; run < RUNS; run++) {
-        const j = await quietly(() => judgeMaterial(c.question, hits, model));
+        const j = await quietly(() => judgeMaterial(c.question, hits, judgeModel));
         seen.push(j.coverage);
         const problems: string[] = [];
         if (!c.acceptable.includes(j.coverage)) problems.push(`coverage ${j.coverage}, expected ${c.acceptable.join("/")}`);
@@ -369,13 +373,13 @@ export async function main(model: string = MODEL): Promise<EvalSummary> {
       // (Retrieval alone cannot show the difference here: the sample library is so small that
       // the top 5 contain nearly every note either way, so the judge's verdict is what is compared.)
       const rawHits = await store.search(c.question, 5);
-      const rawVerdict = (await quietly(() => judgeMaterial(c.question, rawHits, model))).coverage;
+      const rawVerdict = (await quietly(() => judgeMaterial(c.question, rawHits, judgeModel))).coverage;
 
       for (let run = 0; run < RUNS; run++) {
         const rewritten = await quietly(() => rewriteQuestion(c.question, c.history, model));
         lastRewrite = rewritten;
         const hits = await store.search(rewritten, 5);
-        const j = await quietly(() => judgeMaterial(rewritten, hits, model));
+        const j = await quietly(() => judgeMaterial(rewritten, hits, judgeModel));
         seen.push(j.coverage);
         const problems: string[] = [];
         if (c.mustMatch && !c.mustMatch.test(rewritten)) problems.push(`rewritten question lacks the subject: "${rewritten}"`);
@@ -396,7 +400,7 @@ export async function main(model: string = MODEL): Promise<EvalSummary> {
 
     for (const c of selected(CONTRADICTION_CASES)) {
       const hits = await store.search(c.question, 5);
-      const judgement = await quietly(() => judgeMaterial(c.question, hits, model));
+      const judgement = await quietly(() => judgeMaterial(c.question, hits, judgeModel));
       const failures: string[] = [];
       let ok = 0;
 
