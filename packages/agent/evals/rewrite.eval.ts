@@ -7,8 +7,8 @@
 // QUESTIONS (not the answers: those are long) from before those 4 messages.
 //
 // Compared on the same conversations:
-//   current   earlierQuestions = 0 (what the app does today)
-//   variant   earlierQuestions = 8
+//   current   earlierQuestions = 0 (the behaviour before 2026-10-13)
+//   variant   earlierQuestions = 8 (the default since then)
 //
 // Cases:
 //   far-*      the subject is only in a student question 3+ exchanges back. The answers in the
@@ -19,6 +19,12 @@
 //   switch     control: a new, self-contained question after a long topic. Must stay on the new
 //              topic, no old subject added.
 // A run passes when the rewritten question matches `right` and does not match `wrong`.
+//
+// Measured 2026-10-13 (2 runs, temperature 0): current 6/16, variant 16/16, $0.039.
+//   All five far-* cases failed with current, and not by leaving the question unchanged: the rewrite put in
+//   the nearest similar subject (Zrínyi for Dobó, Arany for Petőfi, the Himnusz for the Szózat). The three
+//   controls passed with both. Limits: 8 hand-written cases aimed at this failure; the effect on the library
+//   hits is not measured; a subject named only in an old ANSWER is still out of reach.
 //
 // Run from packages/agent:  npx tsx --env-file=.env evals/rewrite.eval.ts
 // Env:  EVAL_RUNS (default 2; the rewrite runs at temperature 0), EVAL_VERBOSE=1 prints every rewrite

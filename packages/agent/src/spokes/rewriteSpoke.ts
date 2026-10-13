@@ -20,8 +20,11 @@ const MAX_CHARS_PER_MESSAGE = 500; // earlier answers are long formatted text; t
 // Optional: the student's own questions from BEFORE those 4 messages (their answers are left out).
 // A follow-up like "and the other captain I asked about?" can point further back than two exchanges;
 // the subject is usually named in the student's earlier question. Questions are short, so this is cheap.
-// 0 = off (the current behaviour). Measured with evals/rewrite.eval.ts.
-export const DEFAULT_EARLIER_QUESTIONS = 0;
+// 0 = off. Measured 2026-10-13 with evals/rewrite.eval.ts (8 cases, Haiku): with 0, 6/16; with 8, 16/16.
+// With 0 the rewrite did not leave such a follow-up unchanged: it silently put in the nearest similar
+// subject (Zrínyi for Dobó, Arany for Petőfi, the Himnusz for the Szózat). The controls (a reference to
+// the last exchange, "he" meaning the latest person, a topic switch) passed with both settings.
+export const DEFAULT_EARLIER_QUESTIONS = 8;
 
 const SYSTEM_PROMPT = `You rewrite a student's latest message so it can be understood without the conversation.
 Rules:

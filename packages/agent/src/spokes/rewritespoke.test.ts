@@ -57,12 +57,41 @@ describe("rewriteQuestion", () => {
   it("sends only the last 4 messages, each clipped", async () => {
     reply({ question: "x" });
     const long = Array.from({ length: 6 }, (_, i) => ({ role: "user", content: `msg${i} ` + "a".repeat(1000) }));
-    await rewriteQuestion("és?", long);
+    await rewriteQuestion("és?", long, undefined, undefined, 0);
     const sent: string = create.mock.calls[0][0].messages[0].content;
     expect(sent).not.toContain("msg1 ");
     expect(sent).toContain("msg2 ");
     expect(sent).toContain("msg5 ");
     expect(sent.length).toBeLessThan(2500);
+  });
+
+  it("adds the student's earlier questions (no answers), and none with 0", async () => {
+    const long = Array.from({ length: 10 }, (_, i) => ({
+      role: i % 2 === 0 ? "user" : "assistant",
+      content: `${i % 2 === 0 ? "q" : "a"}${i}`,
+    }));
+
+    reply({ question: "x" });
+    await rewriteQuestion("és?", long, undefined, undefined, 0);
+    const off: string = create.mock.calls[0][0].messages[0].content;
+    expect(off).not.toContain("q0");
+    expect(off).not.toContain("omitted");
+
+    reply({ question: "x" });
+    await rewriteQuestion("és?", long, undefined, undefined, 2);
+    const on: string = create.mock.calls[1][0].messages[0].content;
+    expect(on).not.toContain("q0"); // only the last 2 earlier questions
+    expect(on).toContain("q2");
+    expect(on).toContain("q4");
+    expect(on).not.toContain("a3"); // earlier answers are left out
+    expect(on).toContain("a7"); // the last 4 messages stay in full
+    expect(on.indexOf("q4")).toBeLessThan(on.indexOf("q6")); // chronological
+
+    reply({ question: "x" });
+    await rewriteQuestion("és?", long); // default: on (8)
+    const byDefault: string = create.mock.calls[2][0].messages[0].content;
+    expect(byDefault).toContain("q0");
+    expect(byDefault).not.toContain("a1");
   });
 
   it("sanitizes injection phrases in the history", async () => {
