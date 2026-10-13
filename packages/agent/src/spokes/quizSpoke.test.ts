@@ -49,6 +49,51 @@ describe("quizSpoke", () => {
     await expect(quizSpoke(findings, 1)).resolves.toEqual(quiz);
   });
 
+  describe("disagreement flag (quiz from the student's notes)", () => {
+    const question = (disagreement: unknown) => ({
+      question: "When did Elizabeth I become Queen?",
+      options: { A: "1558", B: "1565", C: "1603", D: "1533" },
+      correct: "B",
+      explanation: "The notes say 1565.",
+      ...(disagreement === undefined ? {} : { disagreement }),
+    });
+
+    it("keeps a disagreement that points at another option", async () => {
+      reply({ topic: "t", questions: [question({ option: "A", text: "I know 1558." })] });
+
+      const quiz = await quizSpoke(findings, 1, undefined, { notesAreTheBase: true });
+      expect(quiz.questions[0].correct).toBe("B");
+      expect(quiz.questions[0].disagreement).toEqual({ option: "A", text: "I know 1558." });
+    });
+
+    it("drops a disagreement that points at the marked correct option, or at no option, or has no text", async () => {
+      reply({
+        topic: "t",
+        questions: [
+          question({ option: "B", text: "same as correct" }),
+          question({ option: "Z", text: "not an option" }),
+          question({ option: "A", text: "  " }),
+        ],
+      });
+
+      const quiz = await quizSpoke(findings, 3, undefined, { notesAreTheBase: true });
+      expect(quiz.questions).toHaveLength(3);
+      for (const q of quiz.questions) expect(q.disagreement).toBeUndefined();
+    });
+
+    it("asks for the notes rules only when the notes are the base", async () => {
+      reply({ topic: "t", questions: [question(undefined)] });
+      await quizSpoke(findings, 1);
+      reply({ topic: "t", questions: [question(undefined)] });
+      await quizSpoke(findings, 1, undefined, { notesAreTheBase: true });
+
+      const content = (call: number) => create.mock.calls[call][0].messages[0].content as string;
+      expect(content(0)).not.toContain("OWN NOTES");
+      expect(content(1)).toContain("OWN NOTES");
+      expect(content(1)).toContain("MUST be the answer the facts give");
+    });
+  });
+
   it("returns an empty quiz for a malformed tool payload", async () => {
     reply({ topic: "History" });
 

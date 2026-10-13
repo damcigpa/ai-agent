@@ -64,6 +64,14 @@ let quizSession: QuizSession | null = null;
 // so the quiz has enough facts for several questions.
 const TOPIC_QUIZ_CHUNKS = 8;
 
+// The topic quiz (/quiz <topic>) writes its questions with Sonnet, whatever model is selected.
+// Measured on evals/quiz.eval.ts: with a wrong note, Haiku as question writer flagged correct facts
+// too (it put "why this wrong option is wrong" into the disagreement field); Sonnet flagged only the
+// wrong fact. The topic quiz is rare and asked for, so reliability wins over cost.
+// The judge stays on Haiku: on a Hungarian literature note, Sonnet's judge returned its fact list as
+// a text instead of a list, which reads as "nothing on this topic" (no quiz at all).
+const TOPIC_QUIZ_MODEL = MODEL_SONNET;
+
 // The student's notes on a topic, as findings the quiz can be built from.
 // The vector search always returns its closest chunks, even for a topic the notes never
 // mention, so the material judge decides whether they are really about the topic and
@@ -112,7 +120,15 @@ function handleQuizAnswer(userAnswer: string): string {
     ? `✅ Correct!`
     : `❌ Incorrect. The correct answer was ${current.correct}) ${current.options[current.correct]}`;
 
-  const explanation = `\n💡 ${current.explanation}`;
+  // A quiz from the student's notes follows the notes even when the model knows otherwise. The
+  // student hears about it here, after answering, and is told it is not a checked source.
+  const d = current.disagreement;
+  const disagreement = d
+    ? `\n⚠️ Your notes say ${current.correct}) ${current.options[current.correct]}, so that is the answer here. ` +
+      `But from general knowledge (not checked against a source) it could be ${d.option}) ${current.options[d.option]}: ${d.text} ` +
+      `Look it up and ask your teacher.`
+    : "";
+  const explanation = `\n💡 ${current.explanation}${disagreement}`;
 
   quizSession.currentIndex++;
   quizSession.awaitingAnswer = false;
@@ -173,7 +189,10 @@ export async function chat(userMessage: string): Promise<string> {
     }
 
     console.log(`\n📝 Generating ${questionCount} questions...`);
-    const quiz = await quizSpoke(findings, questionCount, currentModel);
+    const fromNotes = !!quizSession.topicFindings;
+    const quiz = await quizSpoke(findings, questionCount, fromNotes ? TOPIC_QUIZ_MODEL : currentModel, {
+      notesAreTheBase: fromNotes,
+    });
 
     if (!quiz.questions.length) {
       quizSession = null;

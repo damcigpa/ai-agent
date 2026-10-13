@@ -35,7 +35,7 @@ const NONE: MaterialJudgement = { coverage: "none", materialFacts: [], missing: 
 const SYSTEM_PROMPT = `You compare a student's question with excerpts from the student's OWN study notes (handwritten pages and typed notes).
 Rules:
 - Use ONLY the excerpts. Never add facts from your own knowledge, even if you know the answer.
-- A fact must be stated in the excerpts (or follow directly from them). Write it as a short sentence in the language of the notes, and name the file it came from.
+- A fact must be stated in the excerpts (or follow directly from them). Write it as a short sentence in the language of the notes, and give the id of the excerpt it came from ("source").
 - Passages marked [olvashatatlan] are unreadable: never turn them into facts.
 - coverage "full": the excerpts answer the whole question. "partial": they answer only part of it. "none": they do not answer it (for example they are about another topic).
 - "missing": what the question asks that the excerpts do not answer. Empty when coverage is "full".
@@ -56,9 +56,9 @@ const tools: Anthropic.Tool[] = [
             type: "object",
             properties: {
               fact: { type: "string" },
-              file: { type: "string", description: "The file name exactly as written after \"File:\"" },
+              source: { type: "integer", description: "The id of the <material> excerpt that states the fact" },
             },
-            required: ["fact", "file"],
+            required: ["fact", "source"],
           },
         },
         missing: { type: "array", items: { type: "string" } },
@@ -68,12 +68,38 @@ const tools: Anthropic.Tool[] = [
   },
 ];
 
-// The model sometimes copies more than the file name ("1000003153.jpg, part 3"), so the
-// known name is looked for inside what it returned. Longest names first, so "aa.jpg" is
-// not mistaken for "a.jpg". Returns undefined for a file that is not known (Nothing is wrongly attributed to the material).
-function pickFile(value: unknown, knownFiles: string[]): string | undefined {
-  if (typeof value !== "string") return undefined;
-  return [...knownFiles].sort((a, b) => b.length - a.length).find((name) => value.includes(name));
+// The model gives the id of an excerpt, never a file name: real file names are screenshots
+// ("Képernyőfotó 2026-10-13 11.20.03.png") or "jegyzet (2).txt", which a model shortens or rewrites,
+// while a small number it copies reliably. The code maps the id back to the file. An id that is not
+// one of the excerpts gives undefined, so the fact is dropped (Nothing is wrongly attributed to the material).
+function fileById<T extends { file: string }>(value: unknown, items: T[]): string | undefined {
+  const id = typeof value === "number" ? value : typeof value === "string" ? Number(value.trim()) : NaN;
+  if (!Number.isInteger(id) || id < 1 || id > items.length) return undefined;
+  return items[id - 1].file;
+}
+
+// The API does not validate the model's tool input. A list sometimes arrives as a JSON TEXT of the
+// list ("[{...}]") instead of the list itself; read as a list, it would silently count as empty.
+// Such a text is parsed, and it is logged, so the cause stays visible.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- the items are checked field by field by the callers
+function asList(value: unknown, what: string): any[] {
+  if (Array.isArray(value)) return value;
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value.trim());
+      if (Array.isArray(parsed)) {
+        console.log(`  📒 ${what} arrived as text, not as a list: parsed (${parsed.length} item(s))`);
+        return parsed;
+      }
+    } catch (e) {
+      // Shown in full so the shape can be seen (it is the model's own output, already about the notes).
+      const reason = e instanceof Error ? e.message : "unknown error";
+      console.log(`  📒 ${what} arrived as text that is not a JSON list (${reason}). Start of it: ${JSON.stringify(value.slice(0, 400))}`);
+      return [];
+    }
+  }
+  if (value !== undefined) console.log(`  📒 ${what} is not a list (${typeof value}): ignored`);
+  return [];
 }
 
 export async function judgeMaterial(
@@ -86,12 +112,12 @@ export async function judgeMaterial(
 
   // Each excerpt is wrapped in its own <material> tag with the file name as an attribute,
   // and the text is sanitized so a note that contains "ignore all instructions" cannot
-  // reach the model as a live phrase. The tags carry the file name separately — the
-  // model does not need to parse "File: …" lines.
+  // reach the model as a live phrase. Each excerpt has an id: the model names its source by
+  // that id, and the code maps it back to the file.
   const excerpts = hits
     .map(
-      (hit) =>
-        `<material file="${escapeAttr(hit.file)}" part="${hit.chunkIndex + 1}">\n${sanitizeExternalText(hit.text)}\n</material>`,
+      (hit, i) =>
+        `<material id="${i + 1}" file="${escapeAttr(hit.file)}" part="${hit.chunkIndex + 1}">\n${sanitizeExternalText(hit.text)}\n</material>`,
     )
     .join("\n");
 
@@ -127,12 +153,11 @@ export async function judgeMaterial(
       missing?: unknown;
     };
 
-    // Nothing is wrongly attributed to the material: a fact is kept only if it names a file that was really retrieved.
-    const retrievedFiles = [...new Set(hits.map((hit) => hit.file))];
+    // Nothing is wrongly attributed to the material: a fact is kept only if it names an excerpt that was really retrieved.
     const materialFacts: MaterialFact[] = [];
     let ignored = 0;
-    for (const f of Array.isArray(input.materialFacts) ? input.materialFacts : []) {
-      const file = f ? pickFile(f.file, retrievedFiles) : undefined;
+    for (const f of asList(input.materialFacts, "materialFacts")) {
+      const file = f ? fileById(f.source, hits) : undefined;
       if (!file || typeof f.fact !== "string" || f.fact.trim() === "") {
         ignored++;
         continue;
@@ -143,14 +168,14 @@ export async function judgeMaterial(
     const coverage = input.coverage === "full" || input.coverage === "partial" ? input.coverage : "none";
     console.log(
       `  📒 Material check: ${coverage}, ${materialFacts.length} fact(s)` +
-        (ignored ? `, ${ignored} ignored (no known source file)` : ""),
+        (ignored ? `, ${ignored} ignored (no known source excerpt)` : ""),
     );
     if (coverage === "none" || materialFacts.length === 0) return NONE;
 
     const missing =
       coverage === "full"
         ? []
-        : (Array.isArray(input.missing) ? input.missing : [])
+        : asList(input.missing, "missing")
             .filter((m): m is string => typeof m === "string")
             .map((m) => m.trim())
             .filter(Boolean);
@@ -170,7 +195,7 @@ const COMPARE_PROMPT = `You compare facts from a student's own notes with web re
 Rules:
 - Report ONLY real contradictions: the notes and the web findings state different things about the same point (a different date, name, number, cause or outcome).
 - Something the notes do not mention, or extra detail in the web findings, is NOT a contradiction.
-- For each contradiction give the statement from the notes, the file it came from, what the web findings say, which one is probably correct ("material", "web" or "unclear") and a short reason.
+- For each contradiction give the statement from the notes, the id of that note ("source"), what the web findings say, which one is probably correct ("material", "web" or "unclear") and a short reason.
 - Choose "material" or "web" only if you are confident; otherwise "unclear".
 - Write in the language of the notes.
 - If there is no contradiction, return an empty list.
@@ -189,12 +214,12 @@ const compareTools: Anthropic.Tool[] = [
             type: "object",
             properties: {
               material: { type: "string", description: "What the notes say" },
-              file: { type: "string", description: "The file name of that note" },
+              source: { type: "integer", description: "The id of that <material> note" },
               web: { type: "string", description: "What the web findings say" },
               likelyCorrect: { type: "string", enum: ["material", "web", "unclear"] },
               reason: { type: "string" },
             },
-            required: ["material", "file", "web", "likelyCorrect", "reason"],
+            required: ["material", "source", "web", "likelyCorrect", "reason"],
           },
         },
       },
@@ -217,7 +242,7 @@ export async function compareWithWeb(
   // sending them to the model, so an injected phrase inside either side cannot pose
   // as an instruction.
   const notes = materialFacts
-    .map((m) => `<material file="${escapeAttr(m.file)}">${sanitizeExternalText(m.fact)}</material>`)
+    .map((m, i) => `<material id="${i + 1}" file="${escapeAttr(m.file)}">${sanitizeExternalText(m.fact)}</material>`)
     .join("\n");
   const findings = [
     `Confidence: ${web.confidence}`,
@@ -254,10 +279,9 @@ export async function compareWithWeb(
       | undefined;
     const raw = (toolUse?.input as { contradictions?: unknown } | undefined)?.contradictions;
 
-    const materialFiles = [...new Set(materialFacts.map((m) => m.file))];
     const contradictions: Contradiction[] = [];
-    for (const c of Array.isArray(raw) ? raw : []) {
-      const file = c ? pickFile(c.file, materialFiles) : undefined;
+    for (const c of asList(raw, "contradictions")) {
+      const file = c ? fileById(c.source, materialFacts) : undefined;
       if (!file || typeof c.material !== "string" || !c.material.trim() || typeof c.web !== "string" || !c.web.trim()) {
         continue;
       }

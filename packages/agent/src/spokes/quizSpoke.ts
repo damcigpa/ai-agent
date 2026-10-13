@@ -16,6 +16,15 @@ export interface QuizQuestion {
   };
   correct: "A" | "B" | "C" | "D";
   explanation: string;
+  // Only for a quiz built from the student's notes: the notes are the base, so `correct` always follows
+  // them. If the model's general knowledge says the answer is a different option, that is set here
+  // so the student can be told AFTER answering. It is the model's own knowledge, not a checked source.
+  disagreement?: { option: "A" | "B" | "C" | "D"; text: string };
+}
+
+export interface QuizOptions {
+  // The facts are the student's own notes: keep their answer as correct, and flag a disagreement.
+  notesAreTheBase?: boolean;
 }
 
 export interface Quiz {
@@ -50,6 +59,16 @@ const tools: Anthropic.Tool[] = [
               },
               correct: { type: "string", enum: ["A", "B", "C", "D"] },
               explanation: { type: "string" },
+              disagreement: {
+                type: "object",
+                description:
+                  "ONLY when you are confident that, in your general knowledge, a different option is the true answer than the one the facts give. Leave it out otherwise.",
+                properties: {
+                  option: { type: "string", enum: ["A", "B", "C", "D"], description: "The option that is true in your general knowledge" },
+                  text: { type: "string", description: "One short sentence: what you know differently" },
+                },
+                required: ["option", "text"],
+              },
             },
             required: ["question", "options", "correct", "explanation"],
           },
@@ -64,6 +83,21 @@ const OPTION_KEYS = ["A", "B", "C", "D"];
 
 // The model's tool input is not guaranteed to be complete (for example when the
 // answer is cut off), so only fully formed questions are kept.
+// A disagreement is kept only if it points at a real option that is NOT the marked correct one
+// and has a sentence; anything else is dropped (the question stays, without the flag).
+function cleanDisagreement(q: QuizQuestion): QuizQuestion {
+  const d = (q as { disagreement?: unknown }).disagreement as { option?: unknown; text?: unknown } | undefined;
+  const ok =
+    !!d &&
+    typeof d.option === "string" &&
+    OPTION_KEYS.includes(d.option) &&
+    d.option !== q.correct &&
+    typeof d.text === "string" &&
+    d.text.trim() !== "";
+  const { disagreement: _drop, ...rest } = q;
+  return ok ? { ...rest, disagreement: { option: d!.option as "A" | "B" | "C" | "D", text: (d!.text as string).trim() } } : rest;
+}
+
 function isValidQuestion(q: unknown): q is QuizQuestion {
   if (!q || typeof q !== "object") return false;
   const x = q as Record<string, unknown>;
@@ -82,6 +116,7 @@ export async function quizSpoke(
   findings: ResearchFindings,
   questionCount: number = 5,
   model: string = "claude-haiku-4-5-20251001",
+  options: QuizOptions = {},
 ): Promise<Quiz> {
   const response = await client.messages.create({
     model,
@@ -115,7 +150,16 @@ Context: ${findings.context}
 Key facts: ${JSON.stringify(findings.keyFacts)}
 Date: ${findings.date}
 
-Generate exactly ${questionCount} questions.`,
+Generate exactly ${questionCount} questions.${
+          options.notesAreTheBase
+            ? `
+
+These facts are the student's OWN NOTES. Rules for this quiz:
+- The marked correct answer MUST be the answer the facts give, even if you believe the facts are wrong. Never change, fix or soften a fact.
+- Only if you are CONFIDENT that a fact is wrong in your general knowledge (a date, a name or a number), include "disagreement" on that question: "option" is the option that is true in your general knowledge, "text" is one short sentence about what you know differently. Make sure that true answer is one of the options.
+- If you are not confident, or the fact is just a matter of detail or wording, leave "disagreement" out. Never invent a disagreement.`
+            : ""
+        }`,
       },
     ],
   });
@@ -132,7 +176,9 @@ Generate exactly ${questionCount} questions.`,
 
   if (toolUse) {
     const input = toolUse.input as { topic?: unknown; questions?: unknown };
-    const questions = Array.isArray(input.questions) ? input.questions.filter(isValidQuestion) : [];
+    const questions = Array.isArray(input.questions)
+      ? input.questions.filter(isValidQuestion).map(cleanDisagreement)
+      : [];
     if (questions.length === 0) {
       // Logged so an empty quiz has a visible cause (cut-off or malformed model output)
       console.error(formatError(createError("PARSE_FAILED", "quizSpoke", "quizSpoke returned an invalid quiz payload")));
