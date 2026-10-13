@@ -46,14 +46,19 @@ const tools: Anthropic.Tool[] = [
   {
     name: "judge_material",
     description: "Submit how well the student's notes cover the question",
+    // strict: the API constrains the output to this schema (materialFacts is always a real list, whatever
+    // quotation marks a fact contains). Every object needs additionalProperties: false.
+    strict: true,
     input_schema: {
       type: "object",
+      additionalProperties: false,
       properties: {
         coverage: { type: "string", enum: ["full", "partial", "none"] },
         materialFacts: {
           type: "array",
           items: {
             type: "object",
+            additionalProperties: false,
             properties: {
               fact: { type: "string" },
               source: { type: "integer", description: "The id of the <material> excerpt that states the fact" },
@@ -205,13 +210,16 @@ const compareTools: Anthropic.Tool[] = [
   {
     name: "report_contradictions",
     description: "Submit the contradictions between the student's notes and the web findings",
+    strict: true,
     input_schema: {
       type: "object",
+      additionalProperties: false,
       properties: {
         contradictions: {
           type: "array",
           items: {
             type: "object",
+            additionalProperties: false,
             properties: {
               material: { type: "string", description: "What the notes say" },
               source: { type: "integer", description: "The id of that <material> note" },

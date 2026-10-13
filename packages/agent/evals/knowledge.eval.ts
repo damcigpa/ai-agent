@@ -16,6 +16,15 @@
 // one; mixed = names both; hedged = says it is not sure (counted separately, and it is also checked for the
 // author). EVAL_VERBOSE=1 prints every answer.
 //
+// Measured 2026-10-13 (5 calls per quote and model, answers by regex on the author or work):
+//   quote                                   Haiku   Sonnet
+//   target-hu (Katona, Bánk bán)             0/5     0/5     (answers: Petőfi, Madách, Vörösmarty, Ady; never Katona)
+//   target-en (Orwell, Animal Farm)          5/5     5/5
+//   control-hu-1 (Madách: Küzdj és bízva…)   0/5     0/5
+//   control-hu-2 (Vörösmarty: Szózat)        1/5     5/5
+// Hedged ("I am not sure") in 1 of 25 wrong Hungarian answers: the models are confidently wrong, with invented
+// details ("Éva says it when she loses her child"). The metric counts the author OR the work as correct.
+//
 // Run from packages/agent:  npx tsx --env-file=.env evals/knowledge.eval.ts
 // Env:  EVAL_RUNS (default 5), EVAL_VERBOSE=1
 // Cost: a few cents (about 40 short calls).
