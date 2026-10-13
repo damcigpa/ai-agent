@@ -17,6 +17,11 @@ import { TEMPERATURE } from "../sampling.js";
 
 const MAX_HISTORY_MESSAGES = 4; // the last two exchanges are enough to resolve "he", "that", "the third"
 const MAX_CHARS_PER_MESSAGE = 500; // earlier answers are long formatted text; the start names the topic
+// Optional: the student's own questions from BEFORE those 4 messages (their answers are left out).
+// A follow-up like "and the other captain I asked about?" can point further back than two exchanges;
+// the subject is usually named in the student's earlier question. Questions are short, so this is cheap.
+// 0 = off (the current behaviour). Measured with evals/rewrite.eval.ts.
+export const DEFAULT_EARLIER_QUESTIONS = 0;
 
 const SYSTEM_PROMPT = `You rewrite a student's latest message so it can be understood without the conversation.
 Rules:
@@ -52,13 +57,25 @@ export async function rewriteQuestion(
   history: HistoryMessage[],
   model: string = "claude-haiku-4-5-20251001",
   signal?: AbortSignal,
+  earlierQuestions: number = DEFAULT_EARLIER_QUESTIONS,
 ): Promise<string> {
   const recent = history.slice(-MAX_HISTORY_MESSAGES);
   if (recent.length === 0) return question; // first question: nothing to resolve, no call
 
-  const transcript = recent
-    .map((m) => `${m.role}: ${sanitizeExternalText(clip(m.content))}`)
-    .join("\n");
+  const earlier =
+    earlierQuestions > 0
+      ? history
+          .slice(0, Math.max(0, history.length - MAX_HISTORY_MESSAGES))
+          .filter((m) => m.role === "user")
+          .slice(-earlierQuestions)
+      : [];
+
+  // Chronological: the earlier questions first (answers omitted), then the last 4 messages in full.
+  const transcript = [
+    ...earlier.map((m) => `user: ${sanitizeExternalText(clip(m.content))}`),
+    ...(earlier.length ? ["(answers to the questions above are omitted)"] : []),
+    ...recent.map((m) => `${m.role}: ${sanitizeExternalText(clip(m.content))}`),
+  ].join("\n");
 
   try {
     const response = await client.messages.create(
