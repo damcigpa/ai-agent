@@ -132,6 +132,17 @@ function validateFindings(findings: ResearchFindings): string | null {
   return null;
 }
 
+// "High" means the answer can be checked. A source that is only a name ("Petőfi Irodalmi Múzeum") cannot
+// be opened, so the model's own "high" is lowered to "medium". Measured (evals/search.eval.ts, Haiku, 36 runs):
+// 18 of 36 answers said "high" without a single link. "Medium" and "high" take the same path afterwards;
+// the difference is only what the student and the later steps are told.
+export function capUnlinkedConfidence(findings: ResearchFindings): ResearchFindings {
+  if (findings.confidence !== "high") return findings;
+  if (findings.sources.some((src) => /^https?:\/\//i.test(src))) return findings;
+  console.log("  ⚠️  Confidence high, but no source link — lowered to medium");
+  return { ...findings, confidence: "medium" };
+}
+
 async function routeByConfidence(
   findings: ResearchFindings,
 ): Promise<ResearchFindings> {
@@ -174,7 +185,7 @@ async function processFindings(
       escalateReason: `Missing required fields: ${missingRequired}`,
     };
   }
-  return await routeByConfidence(findings);
+  return await routeByConfidence(capUnlinkedConfidence(findings));
 }
 
 export async function searchSpoke(
@@ -220,7 +231,7 @@ If search snippets are too short, use fetch_page on the single most promising UR
       );
 
       stream.on("message", (msg) => {
-        trackUsage(msg.usage);
+        trackUsage(msg.usage, msg.model);
       });
 
       const response = await stream.finalMessage();
