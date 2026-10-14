@@ -48,6 +48,16 @@ export function QuizPanel({ sessionId }: QuizPanelProps) {
     reset();
   };
 
+  // Leave a quiz that is under way (the score and the questions are dropped).
+  const quitButton = (
+    <button
+      onClick={handleRestart}
+      className="text-xs text-gray-400 hover:text-gray-600 self-start"
+    >
+      Quit quiz
+    </button>
+  );
+
   if (status === "idle") {
     return (
       <div className="border rounded-xl p-4 flex flex-col gap-3">
@@ -108,6 +118,7 @@ export function QuizPanel({ sessionId }: QuizPanelProps) {
         >
           {status === "completed" ? "See results" : "Next question"}
         </button>
+        {status !== "completed" && quitButton}
       </div>
     );
   }
@@ -157,6 +168,7 @@ export function QuizPanel({ sessionId }: QuizPanelProps) {
           </button>
         ))}
       </div>
+      {quitButton}
     </div>
   );
 }
