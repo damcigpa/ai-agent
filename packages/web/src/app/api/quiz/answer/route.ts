@@ -75,6 +75,11 @@ export async function POST(req: NextRequest) {
       wasCorrect,
       correctAnswer: question.correct,
       explanation: question.explanation,
+      // Topic quiz only: the notes' answer is the correct one, but the model knows differently.
+      // Shown after answering, as not a checked source (quizSpoke.ts, notesAreTheBase).
+      disagreement: question.disagreement
+        ? { ...question.disagreement, optionText: question.options[question.disagreement.option] }
+        : undefined,
       score: updated.score,
       status: getQuizStatus(updated.answers),
       unansweredIndices,

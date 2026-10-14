@@ -12,6 +12,8 @@ export interface QuizAnswerResult {
   wasCorrect: boolean;
   correctAnswer: "A" | "B" | "C" | "D";
   explanation: string;
+  // Topic quiz only: the model knows the answer differently from the student's notes.
+  disagreement?: { option: "A" | "B" | "C" | "D"; optionText: string; text: string };
 }
 
 export type QuizStatus = "idle" | "in_progress" | "completed";
@@ -48,14 +50,15 @@ export function useQuiz() {
   const [state, setState] = useState<QuizState>(initialState);
 
   const startQuiz = useCallback(
-    async (sessionId: string, questionCount?: number) => {
+    // `topic`: a quiz from the student's own notes on that topic; without it, from the conversation.
+    async (sessionId: string, questionCount?: number, topic?: string) => {
       setState((s) => ({ ...s, loading: true, error: null }));
 
       try {
         const res = await fetch("/api/quiz/start", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sessionId, questionCount }),
+          body: JSON.stringify({ sessionId, questionCount, topic }),
         });
 
         const data = await res.json();
@@ -160,6 +163,7 @@ export function useQuiz() {
             wasCorrect: data.wasCorrect,
             correctAnswer: data.correctAnswer,
             explanation: data.explanation,
+            disagreement: data.disagreement,
           },
           loading: false,
           error: null,

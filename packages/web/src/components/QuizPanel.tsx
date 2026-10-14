@@ -33,6 +33,9 @@ export function QuizPanel({ sessionId }: QuizPanelProps) {
   // before they've seen how question 1 went.
   const [awaitingContinue, setAwaitingContinue] = useState(false);
 
+  // The topic to quiz on from the student's own notes. Empty = a quiz on this conversation.
+  const [topicInput, setTopicInput] = useState("");
+
   const handleAnswer = async (letter: string) => {
     await submitAnswer(letter);
     setAwaitingContinue(true);
@@ -49,11 +52,20 @@ export function QuizPanel({ sessionId }: QuizPanelProps) {
     return (
       <div className="border rounded-xl p-4 flex flex-col gap-3">
         <p className="text-sm text-gray-500">
-          Test yourself on this conversation with a quick quiz.
+          Test yourself on this conversation with a quick quiz, or type a topic
+          to be quizzed on your own notes.
         </p>
+        <input
+          value={topicInput}
+          onChange={(e) => setTopicInput(e.target.value)}
+          placeholder="Topic from your notes (optional)"
+          maxLength={200}
+          disabled={loading}
+          className="border rounded-xl px-4 py-2 text-sm disabled:opacity-50"
+        />
         {error && <p className="text-red-500 text-sm">{error}</p>}
         <button
-          onClick={() => startQuiz(sessionId)}
+          onClick={() => startQuiz(sessionId, undefined, topicInput.trim() || undefined)}
           disabled={loading}
           className="w-full bg-blue-500 text-white px-4 py-2 rounded-xl hover:bg-blue-600 disabled:opacity-50"
         >
@@ -78,6 +90,15 @@ export function QuizPanel({ sessionId }: QuizPanelProps) {
           </p>
         )}
         <p className="text-sm text-gray-600">{lastResult.explanation}</p>
+        {lastResult.disagreement && (
+          <p className="text-sm text-amber-600">
+            ⚠️ Your notes say {lastResult.correctAnswer}, so that is the answer
+            here. But from general knowledge (not checked against a source) it
+            could be {lastResult.disagreement.option}){" "}
+            {lastResult.disagreement.optionText}: {lastResult.disagreement.text}{" "}
+            Look it up and ask your teacher.
+          </p>
+        )}
         <p className="text-xs text-gray-400">
           Score: {score}/{totalQuestions}
         </p>
