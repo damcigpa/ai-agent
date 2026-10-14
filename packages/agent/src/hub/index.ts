@@ -62,6 +62,7 @@ function withMaterial(
     context: findings.context || facts.join(" "),
     keyFacts: [...new Set([...facts, ...(findings.keyFacts ?? [])])],
     materialFacts: material.materialFacts,
+    noteConflicts: material.conflicts ?? [],
   };
 }
 
@@ -149,6 +150,9 @@ export function hub(
             enqueue({ type: "progress", data: "📒 Checking your material..." });
             const judgement = await judgeMaterial(materialQuestion, hits, model, signal);
             if (judgement.coverage !== "none") material = judgement; // "none" → unchanged flow (No relevant material changes nothing)
+            if (material?.conflicts?.length) {
+              enqueue({ type: "progress", data: `⚠️  Two of your notes disagree on ${material.conflicts.length} point(s)` });
+            }
           }
 
           if (material?.coverage === "full") {

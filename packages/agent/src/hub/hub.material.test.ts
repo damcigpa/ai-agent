@@ -134,6 +134,22 @@ describe("hub material step", () => {
     expect(r.done).toContain("**The sources are probably right** — több forrás");
     expect(m.pad.value.findings.at(-1).contradictions).toHaveLength(1); // kept through the explain step and saved
   });
+  it("two notes that disagree are shown with both files, and no verdict", async () => {
+    const conflicts = [{ point: "Mária anyja", first: { fact: "Boleyn Anna volt.", file: "mary_notes.txt" }, second: { fact: "Aragóniai Katalin volt.", file: "henry_viii.txt" } }];
+    m.judge.mockResolvedValueOnce({ coverage: "full", materialFacts: facts, missing: [], conflicts });
+    const r = await run({ searchLibrary: async () => hits });
+    expect(r.progress).toContain("⚠️  Two of your notes disagree on 1 point(s)");
+    expect(r.done).toContain("## ⚠️ CONFLICT — two of your notes disagree (1)");
+    expect(r.done).toContain("**mary_notes.txt**: Boleyn Anna volt.");
+    expect(r.done).toContain("**henry_viii.txt**: Aragóniai Katalin volt.");
+    expect(r.done).not.toContain("probably right");
+  });
+  it("no conflict → no conflict block", async () => {
+    m.judge.mockResolvedValueOnce({ coverage: "full", materialFacts: facts, missing: [], conflicts: [] });
+    const r = await run({ searchLibrary: async () => hits });
+    expect(r.done).not.toContain("CONFLICT");
+    expect(r.progress.join("\n")).not.toContain("Two of your notes");
+  });
   it("full coverage → no comparison", async () => {
     m.judge.mockResolvedValueOnce({ coverage: "full", materialFacts: facts, missing: [] });
     await run({ searchLibrary: async () => hits });

@@ -1,4 +1,4 @@
-import { Contradiction, ResearchFindings } from "../types.js";
+import { Contradiction, NoteConflict, ResearchFindings } from "../types.js";
 import { AnalysisFindings } from "../spokes/analyzeSpoke.js";
 import { Explanation } from "../spokes/explainSpoke.js";
 
@@ -31,6 +31,22 @@ export function contradictionBlock(contradictions: Contradiction[]): string[] {
     lines.push(`- 🌐 **The sources**: ${c.web}`);
     lines.push(`  - Reliability: ${c.webConfidence ? CONFIDENCE[c.webConfidence] : "unknown"}`);
     lines.push(`- → **${VERDICT[c.likelyCorrect]}**${c.reason ? ` — ${c.reason}` : ""}`);
+    lines.push("");
+  });
+  return lines;
+}
+
+// Two of the student's own notes say different things about the same point. Both are shown with their
+// files, and no verdict is given: the agent has nothing to check them against.
+export function noteConflictBlock(conflicts: NoteConflict[]): string[] {
+  if (conflicts.length === 0) return [];
+  const lines = [`## ⚠️ CONFLICT — two of your notes disagree (${conflicts.length})`, ""];
+  conflicts.forEach((c, i) => {
+    if (conflicts.length > 1) lines.push(`**${i + 1}.** ${c.point}`);
+    else lines.push(`**${c.point}**`);
+    lines.push(`- 📒 **${c.first.file}**: ${c.first.fact}`);
+    lines.push(`- 📒 **${c.second.file}**: ${c.second.fact}`);
+    lines.push("- → The agent cannot tell which note is right: please check them against your textbook.");
     lines.push("");
   });
   return lines;
@@ -70,6 +86,7 @@ export function formatOutput(
 
   // Shown first (after the header): a disagreement matters more than anything below it.
   lines.push(...contradictionBlock(findings.contradictions ?? []));
+  lines.push(...noteConflictBlock(findings.noteConflicts ?? []));
 
   const notice = uncertaintyNotice(findings.confidence);
   if (notice) lines.push(notice, "");

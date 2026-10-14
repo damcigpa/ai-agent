@@ -66,6 +66,41 @@ describe("judgeMaterial — sources by excerpt id", () => {
   });
 });
 
+describe("judgeMaterial — two notes that disagree", () => {
+  const conflict = { point: "Mária anyja", firstFact: "Mária anyja Boleyn Anna volt.", firstSource: 1, secondFact: "Mária anyja Aragóniai Katalin volt.", secondSource: 2 };
+
+  it("maps both statements of a conflict back to their files", async () => {
+    reply("judge_material", { coverage: "full", materialFacts: [{ fact: "x", source: 1 }], missing: [], conflicts: [conflict] });
+    const j = await judgeMaterial("q", HITS, "m");
+    expect(j.conflicts).toEqual([
+      { point: "Mária anyja", first: { fact: "Mária anyja Boleyn Anna volt.", file: SHOT }, second: { fact: "Mária anyja Aragóniai Katalin volt.", file: NOTE } },
+    ]);
+  });
+
+  it("drops a conflict with an unknown id, with the same excerpt twice, or with an empty text", async () => {
+    reply("judge_material", {
+      coverage: "full",
+      materialFacts: [{ fact: "x", source: 1 }],
+      missing: [],
+      conflicts: [{ ...conflict, secondSource: 9 }, { ...conflict, secondSource: 1 }, { ...conflict, point: "  " }],
+    });
+    expect((await judgeMaterial("q", HITS, "m")).conflicts).toEqual([]);
+  });
+
+  it("has no conflicts when the model sends none", async () => {
+    reply("judge_material", { coverage: "full", materialFacts: [{ fact: "x", source: 1 }], missing: [] });
+    expect((await judgeMaterial("q", HITS, "m")).conflicts).toEqual([]);
+  });
+
+  it("tells the model what a conflict is, and what is not one", async () => {
+    reply("judge_material", { coverage: "full", materialFacts: [{ fact: "x", source: 1 }], missing: [], conflicts: [] });
+    await judgeMaterial("q", HITS, "m");
+    const call = create.mock.calls[0][0];
+    expect(call.system).toContain("conflicts");
+    expect(call.tools[0].input_schema.required).toContain("conflicts");
+  });
+});
+
 describe("judgeMaterial — a list that arrives as text", () => {
   it("parses materialFacts sent as a JSON text instead of a list", async () => {
     reply("judge_material", {

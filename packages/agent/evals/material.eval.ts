@@ -7,6 +7,9 @@
 // contradictions are checked against a fixed "trusted source" text, so every run gets the
 // same input.
 //
+// Conflict cases (judge only): two of the student's own notes disagree with each other; the judge must report
+// the pair (conflicts) and keep both facts, and must not invent a conflict when the notes agree.
+//
 // Each case runs several times, because model answers vary; the result is a pass rate.
 // Cases marked [hard] are traps a weaker model is more likely to fall into: an unreadable
 // passage, an instruction hidden in a note, a swapped name, a reworded (not contradicting)
@@ -268,6 +271,31 @@ const CONTRADICTION_CASES: ContradictionCase[] = [
   },
 ];
 
+// --- Conflict cases: two of the student's OWN notes disagree (no web involved) ---
+// mary_notes.txt (deliberate error) says Anne Boleyn was Mary's mother; henry_viii.txt says Catherine of
+// Aragon. The judge has to report the pair instead of silently picking one. Only the judge is tested here.
+
+interface ConflictCase {
+  name: string;
+  question: string;
+  expectConflict: boolean;
+  files?: string[]; // the conflict must name both of these notes
+}
+
+const CONFLICT_CASES: ConflictCase[] = [
+  {
+    name: "[hard] two notes disagree — the pair is reported, neither is silently picked",
+    question: "Who was the mother of Mary I?",
+    expectConflict: true,
+    files: ["mary_notes.txt", "henry_viii.txt"],
+  },
+  {
+    name: "no false conflict — two notes say the same",
+    question: "Who was the mother of Elizabeth I?",
+    expectConflict: false,
+  },
+];
+
 // --- Helpers ---
 
 // The judge and compare steps log a line per call; keep the eval output readable.
@@ -311,7 +339,11 @@ export async function main(model: string = MODEL): Promise<EvalSummary> {
   for (const [name, text] of Object.entries(NOTES)) writeFileSync(join(paths.libraryDir, name), text);
 
   let passedCases = 0;
-  const total = selected(COVERAGE_CASES).length + selected(FOLLOWUP_CASES).length + selected(CONTRADICTION_CASES).length;
+  const total =
+    selected(COVERAGE_CASES).length +
+    selected(FOLLOWUP_CASES).length +
+    selected(CONTRADICTION_CASES).length +
+    selected(CONFLICT_CASES).length;
   const cases: CaseResult[] = [];
 
   try {
@@ -447,6 +479,37 @@ export async function main(model: string = MODEL): Promise<EvalSummary> {
         if (judgement.materialFacts.length === 0) console.log("          (none)");
         judgement.materialFacts.forEach((f) => console.log(`          · ${f.fact}  [${f.file}]`));
       }
+    }
+
+    // Counted with the contradictions in the report: both are "notes that disagree", only the other side differs.
+    for (const c of selected(CONFLICT_CASES)) {
+      const hits = await store.search(c.question, 5);
+      const failures: string[] = [];
+      let ok = 0;
+      for (let run = 0; run < RUNS; run++) {
+        const j = await quietly(() => judgeMaterial(c.question, hits, judgeModel));
+        const found = j.conflicts ?? [];
+        const problems: string[] = [];
+        if (c.expectConflict && found.length === 0) problems.push("conflict not reported");
+        if (!c.expectConflict && found.length > 0) {
+          problems.push(`false conflict: ${found.map((f) => `"${f.first.fact}" (${f.first.file}) vs "${f.second.fact}" (${f.second.file})`).join("; ")}`);
+        }
+        if (c.expectConflict && found.length > 0 && c.files) {
+          const named = found.some((f) => c.files!.every((file) => f.first.file === file || f.second.file === file));
+          if (!named) problems.push(`conflict does not name ${c.files.join(" and ")}: ${found.map((f) => `${f.first.file} / ${f.second.file}`).join("; ")}`);
+        }
+        // Both statements must also be among the facts: nothing may be dropped to hide the disagreement.
+        if (c.expectConflict && found.length > 0) {
+          const factFiles = new Set(j.materialFacts.map((f) => f.file));
+          if (c.files && !c.files.every((file) => factFiles.has(file))) problems.push("a conflicting note is missing from the facts");
+        }
+        if (problems.length === 0) ok++;
+        else failures.push(...problems);
+      }
+      if (ok === RUNS) passedCases++;
+      cases.push({ name: c.name, group: "contradiction", ok, runs: RUNS });
+      console.log(`${ok === RUNS ? "✅" : "❌"} ${rate(ok)}  ${c.name}`);
+      [...new Set(failures)].forEach((f) => console.log(`        - ${f}`));
     }
 
     console.log(`\n--- ${passedCases}/${total} cases passed every run ---`);
