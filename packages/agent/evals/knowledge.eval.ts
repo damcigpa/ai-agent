@@ -28,7 +28,10 @@
 // Run from packages/agent:  npx tsx --env-file=.env evals/knowledge.eval.ts
 // Env:  EVAL_RUNS (default 5), EVAL_VERBOSE=1
 // Cost: a few cents (about 40 short calls).
+// A Markdown report (table, the first answer of each quote and model, cost) is written to evals/results/.
 
+import { mkdirSync, writeFileSync } from "fs";
+import { join } from "path";
 import { client } from "../src/client.js";
 
 const RUNS = Number(process.env.EVAL_RUNS ?? 5);
@@ -84,6 +87,7 @@ async function ask(model: string, prompt: string) {
 async function main() {
   console.log(`\nKnowledge eval — ${RUNS} call(s) per quote and model, no notes\n`);
   const rows: string[][] = [];
+  const examples: string[] = [];
   let cost = 0;
 
   for (const model of [HAIKU, SONNET]) {
@@ -96,6 +100,7 @@ async function main() {
         const wrong = item.wrong ? item.wrong.test(r.text) : false;
         const kind = right && wrong ? "mixed" : right ? "correct" : "wrong";
         t[kind]++;
+        if (i === 0) examples.push(`- **${model.includes("haiku") ? "Haiku" : "Sonnet"} · ${item.name}** [${kind}]: ${r.text.replace(/\s+/g, " ")}`);
         if (HEDGE.test(r.text)) t.hedged++;
         if (VERBOSE) console.log(`${model.includes("haiku") ? "Haiku " : "Sonnet"} ${item.name} #${i + 1} [${kind}${HEDGE.test(r.text) ? ", hedged" : ""}]: ${r.text.replace(/\s+/g, " ")}`);
       }
@@ -110,6 +115,29 @@ async function main() {
   console.log(width.map((w) => "-".repeat(w)).join("   "));
   rows.forEach((r) => console.log(line(r)));
   console.log(`\nCost of this run: $${cost.toFixed(3)}\n`);
+
+  const stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "").replace(/^(\d{8})/, "$1-");
+  const report = [
+    `# Knowledge eval — ${new Date().toISOString().slice(0, 16).replace("T", " ")}`,
+    "",
+    `${RUNS} call(s) per quote and model, no notes. Correct = names the right author or work and not the common mix-up.`,
+    "",
+    `| ${head.join(" | ")} |`,
+    `|${head.map(() => "---").join("|")}|`,
+    ...rows.map((r) => `| ${r.join(" | ")} |`),
+    "",
+    "## First answer per quote and model",
+    "",
+    ...examples,
+    "",
+    `Cost: $${cost.toFixed(3)}`,
+    "",
+  ].join("\n");
+  const dir = join(process.cwd(), "evals", "results");
+  mkdirSync(dir, { recursive: true });
+  const file = join(dir, `knowledge-${stamp}.md`);
+  writeFileSync(file, report);
+  console.log(`Report: ${file}`);
 }
 
 main().catch((e) => {

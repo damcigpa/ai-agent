@@ -14,6 +14,10 @@ import { checkBudget } from "../budget.js";
 
 const MAX_TURNS = 10;
 
+// Notes vs web comparison: always Sonnet, whatever model answers. Catching a wrong note is the core of
+// notes-first, and the input is small. Measured (material.eval, swapped-name case): Haiku 0/3, Sonnet 3/3.
+export const COMPARE_MODEL = "claude-sonnet-4-6";
+
 const emptyFindings: ResearchFindings = {
   author: "",
   work: "",
@@ -206,7 +210,7 @@ export function hub(
               materialQuestion,
               material.materialFacts,
               updatedFindings, // the web findings alone, before the material was merged in
-              model,
+              COMPARE_MODEL,
               signal
             );
             searchFindings = { ...searchFindings, contradictions };

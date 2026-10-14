@@ -72,6 +72,7 @@ describe("hub material step", () => {
     expect(r.done).toContain("## 📒 From your material");
     expect(r.done).toContain("(1000003153.jpg)");
     expect(r.done).not.toContain("britannica");
+    expect(r.done).not.toContain("Date/Period"); // no date field from the notes: no "Unknown" line
     expect(r.progress).toContain("📒 Your material covers the question — no web search needed");
   });
   it("full with a search-only plan: an explain step is added", async () => {
@@ -123,7 +124,8 @@ describe("hub material step", () => {
     m.compare.mockResolvedValueOnce([{ material: facts[0].fact, file: "1000003153.jpg", web: "Más dátum.", likelyCorrect: "web", reason: "több forrás" }]);
     const r = await run({ searchLibrary: async () => hits });
     expect(m.compare).toHaveBeenCalledTimes(1);
-    const [, sentFacts, sentWeb] = m.compare.mock.calls[0];
+    const [, sentFacts, sentWeb, sentModel] = m.compare.mock.calls[0];
+    expect(sentModel).toBe("claude-sonnet-4-6"); // Sonnet, even when the answer runs on Haiku
     expect(sentFacts).toEqual(facts);
     expect(sentWeb.materialFacts).toBeUndefined(); // web only, not merged
     expect(sentWeb.sources).toEqual(["https://britannica.com/x"]);

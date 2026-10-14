@@ -60,7 +60,9 @@ export function formatOutput(
   const lines = [
     `# ${userQuestion}`,
     `**Subject:** ${findings.subject ?? "general"}`,
-    `**Date/Period:** ${findings.date || "Unknown"}`,
+    // No date found: leave the line out instead of "Unknown" (an answer from the notes has no date field,
+    // even when the notes give the date in the text).
+    findings.date ? `**Date/Period:** ${findings.date}` : "",
     findings.author ? `**Key Figure:** ${findings.author}` : "",
     findings.work ? `**Work/Event:** ${findings.work}` : "",
     "",
