@@ -79,6 +79,8 @@ export function hub(
         controller.close();
         return;
       }
+      // Close to the limit: a progress line, the question still runs (shown by the CLI and the web).
+      if (budget.warning) enqueue({ type: "progress", data: `⚠️  ${budget.warning}` });
 
       const checkAborted = () => {
         if (signal?.aborted) {

@@ -14,6 +14,11 @@ import { dirname, resolve } from "path";
 
 export const DEFAULT_DAILY_TOKEN_LIMIT = 1_000_000;
 
+// From this share of the limit on, every question starts with a warning, so the block at 100% is not a
+// surprise. One question can use tens of thousands of tokens and the check runs before it, so the limit
+// itself can be passed by a single question: the warning leaves room to stop in time.
+export const WARN_FRACTION = 0.8;
+
 interface BudgetFile {
   date: string; // local date, YYYY-MM-DD
   tokens: number;
@@ -69,7 +74,7 @@ export function recordTokens(tokens: number, path: string = defaultBudgetPath(),
   }
 }
 
-export type BudgetCheck = { ok: true } | { ok: false; message: string };
+export type BudgetCheck = { ok: true; warning?: string } | { ok: false; message: string };
 
 export function checkBudget(
   options: { path?: string; limit?: number; now?: Date } = {},
@@ -77,7 +82,16 @@ export function checkBudget(
   const { path = defaultBudgetPath(), limit = dailyLimit(), now = new Date() } = options;
   if (limit === 0) return { ok: true };
   const used = tokensUsedToday(path, now);
-  if (used < limit) return { ok: true };
+  if (used < limit) {
+    if (used < limit * WARN_FRACTION) return { ok: true };
+    const percent = Math.floor((used / limit) * 100);
+    return {
+      ok: true,
+      warning:
+        `Daily token budget: ${percent}% used (${used.toLocaleString("en-US")} of ${limit.toLocaleString("en-US")} tokens). ` +
+        `New questions are blocked at the limit; it resets at midnight.`,
+    };
+  }
   return {
     ok: false,
     message:
